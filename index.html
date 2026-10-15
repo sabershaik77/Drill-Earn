@@ -1,51 +1,174 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>Drill Cutter</title>
+<html lang="en"><head><meta charset="utf-8"><title>Drill & Earn</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script async src="https://sad.adsgram.ai/js/sad.min.js"></script>
 <style>
-:root{--bg:#000;--fg:#f2e6d0;--bar:#3a3a3a}
+:root{--bg:#000;--fg:#f2e6d0;--soil:#2a2218;--soil2:#3a2f22;--gold:#ffd21a;--grn:#6cc04a}
 *{box-sizing:border-box;touch-action:none;user-select:none;-webkit-user-select:none}
-html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;font-family:monospace;color:var(--fg)}
+html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--fg)}
 canvas{position:fixed;inset:0;width:100%;height:100%;image-rendering:pixelated}
-#hud{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 8px) 12px 0;display:flex;gap:10px;align-items:center;font-size:14px;flex-wrap:wrap}
-#hp{width:110px;height:12px;background:var(--bar);border:2px solid #777}
+#hud{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 8px) 12px 0;display:none;gap:10px;align-items:center;font-size:14px;flex-wrap:wrap}
+#hp{width:110px;height:12px;background:#3a3a3a;border:2px solid #777}
 #hpf{height:100%;width:100%;background:#d94a3a}
-#base{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 28px);width:140px;height:140px;margin-left:-70px;border-radius:50%;background:rgba(255,255,255,.07);border:3px solid rgba(255,255,255,.25)}
+#base{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 28px);width:140px;height:140px;margin-left:-70px;border-radius:50%;background:rgba(255,255,255,.07);border:3px solid rgba(255,255,255,.25);display:none}
 #knob{position:absolute;left:50px;top:50px;width:40px;height:40px;border-radius:50%;background:rgba(120,200,90,.8);border:3px solid #cfe9b8}
-#over{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.8);gap:12px;font-size:20px;text-align:center}
-#over button{font:inherit;padding:10px 24px;background:#6cc04a;border:0;color:#102008;cursor:pointer}
+body.play #hud{display:flex}body.play #base{display:block}
+.ov,.ov *{touch-action:manipulation}
+.ov{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.82);padding:16px;text-align:center}
+.card{width:100%;max-width:340px;background:var(--soil);border:2px solid var(--soil2);padding:18px;display:flex;flex-direction:column;gap:10px;max-height:92%}
+h2,h3{margin:0;font-size:20px}h3{font-size:17px}p{margin:0;font-size:13px;opacity:.85}
+.row{display:flex;justify-content:space-between;align-items:baseline}
+.bal{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:14px;text-align:left}
+.bal span{background:var(--soil2);padding:6px 8px}
+button{font:inherit;padding:11px 14px;background:var(--soil2);border:2px solid #5a4a36;color:var(--fg);cursor:pointer}
+button.big{background:var(--grn);border-color:#a8e08c;color:#102008;font-weight:bold;font-size:17px;padding:14px}
+button:disabled{opacity:.45}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.grid button{padding:10px 4px;font-size:13px}
+input{font:inherit;padding:10px;background:#15110b;border:2px solid #5a4a36;color:var(--fg);width:100%;user-select:text;-webkit-user-select:text;touch-action:auto}
+.list{overflow:auto;touch-action:pan-y;text-align:left;font-size:13px;display:flex;flex-direction:column;gap:4px}
+.list div{display:flex;justify-content:space-between;gap:8px;background:var(--soil2);padding:6px 8px}
+#toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 56px);transform:translateX(-50%);background:var(--gold);color:#201800;padding:8px 14px;font-size:14px;display:none;z-index:9;max-width:90%;text-align:center}
 </style></head><body>
 <canvas id="c"></canvas>
-<div id="hud"><div id="hp"><div id="hpf"></div></div><span id="sc">Score 0</span><span id="cs">💵0</span><span id="sk">💎0</span><span id="gd">⭐0</span></div>
+<div id="hud"><div id="hp"><div id="hpf"></div></div><span id="sc">Score 0</span><span id="cs">💵0</span><span id="sk">💠0</span><span id="gd">💛0</span></div>
 <div id="base"><div id="knob"></div></div>
-<div id="over"><div>Game Over</div><div id="fin"></div><button onclick="start()">Play Again</button></div>
+
+<div id="load" class="ov" style="display:flex"><div id="lt">Loading…</div></div>
+
+<div id="menu" class="ov"><div class="card">
+  <h2>⛏ Drill & Earn</h2>
+  <div class="row"><b id="en">⚡ 0/24</b><small id="nx"></small></div>
+  <div class="bal"><span id="by">💛 0</span><span id="bp">PXN 0</span><span id="bc">💵 0</span><span id="bb">💠 0</span></div>
+  <button class="big" id="pl">▶ Play (1 ⚡)</button>
+  <button id="adb">📺 Watch ad (+1 ⚡)</button>
+  <div class="grid"><button id="sw">🔄 Swap</button><button id="wd">💸 Withdraw</button><button id="lb">🏆 Top 50</button></div>
+</div></div>
+
+<div id="panel" class="ov"><div class="card" id="pc"></div></div>
+
+<div id="over" class="ov"><div class="card">
+  <h2>Game over</h2><p id="fin"></p>
+  <button id="rb" style="display:none">Retry sending result</button>
+  <button class="big" id="ob">Menu</button>
+</div></div>
+<div id="toast"></div>
+
 <script>
-const C=document.getElementById('c'),X=C.getContext('2d');
-const W=640,S=6,WS=W*S;
+// ================= SETTINGS (edit these two) =================
+const PROJECT_ID='vgesniwdlepqsezeerdc';        // Supabase Project ID
+const ADSGRAM_BLOCK_ID='';                 // Adsgram block id (leave empty until ad network is set up)
+// ==============================================================
+const API='https://'+PROJECT_ID+'.supabase.co/functions/v1/game';
+const TG=window.Telegram&&Telegram.WebApp;if(TG){TG.ready();TG.expand();try{TG.disableVerticalSwipes()}catch(e){}}
+const $=id=>document.getElementById(id),sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const M={no_energy:'No energy left ⚡',ad_limit_reached:'No ads left today',ad_cooldown:'Wait a few seconds before the next ad',round_already_active:'A round is already running',banned:'This account is banned',below_min_swap:'Amount is below the minimum',swap_disabled:'Swap is turned off',withdraw_disabled:'Withdrawals are turned off',low_trust:'Account is under verification',account_too_new:'Account is too new. Try again later',bad_ton_address:'TON address is not valid',amount_out_of_range:'Amount is out of allowed range',daily_cap:'Daily withdraw limit reached',under_review:'Account is under review',account_restricted:'Account is restricted',init_data_expired:'Reopen the game from Telegram',bad_init_data:'Open this game from Telegram',unauthorized:'Session expired. Reopen the game',network:'Network problem. Try again'};
+const msg=e=>{const m=e&&e.message||'error';return M[m]||(/check constraint/.test(m)?'Not enough balance':m)};
+let token=null,me=null,R=null,busy=0,nextAt=0;
+function dev(){let d=localStorage.getItem('dv');if(!d){d=Array.from(crypto.getRandomValues(new Uint8Array(12)),b=>b.toString(16).padStart(2,'0')).join('');localStorage.setItem('dv',d)}return d}
+async function api(action,data={},retry){
+  let r,j;
+  try{r=await fetch(API,{method:'POST',headers:Object.assign({'Content-Type':'application/json'},token?{Authorization:'Bearer '+token}:{}),body:JSON.stringify(Object.assign({action},data))});j=await r.json()}catch(e){throw new Error('network')}
+  if(r.status===401&&action!=='auth'&&!retry){await login();return api(action,data,true)}
+  if(!r.ok||j.error)throw new Error(j.error||'error');
+  return j;
+}
+async function login(){const j=await api('auth',{initData:TG?TG.initData:'',device:dev()});token=j.token}
+async function refresh(){me=await api('me');renderMenu()}
+function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',2600)}
+
+// ---------- menu ----------
+function renderMenu(){
+  const e=me.energy,w=me.wallet;
+  $('en').textContent='⚡ '+e.energy+'/'+e.cap;
+  $('by').textContent='💛 '+w.yellow;$('bc').textContent='💵 '+w.cash;$('bb').textContent='💠 '+w.blue;
+  $('bp').textContent=me.token.symbol+' '+(+w.pxn).toFixed(4);
+  $('adb').textContent='📺 Watch ad (+1 ⚡) · '+e.ads_left+' left';$('adb').disabled=e.ads_left<=0;
+  nextAt=e.next_in_seconds!=null?Date.now()+e.next_in_seconds*1000:0;
+}
+setInterval(()=>{
+  if(!me||st)return;const e=me.energy;
+  if(!nextAt||e.energy>=e.cap){$('nx').textContent='';return}
+  const s=Math.max(0,Math.ceil((nextAt-Date.now())/1000));
+  $('nx').textContent='+1 in '+Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+  if(s===0&&!busy){busy=1;refresh().catch(()=>{}).finally(()=>busy=0)}
+},1000);
+function showMenu(){document.body.className='';$('over').style.display='none';$('panel').style.display='none';$('menu').style.display='flex'}
+function panel(html){$('pc').innerHTML=html+'<button id="px">Close</button>';$('px').onclick=()=>$('panel').style.display='none';$('panel').style.display='flex'}
+
+$('pl').onclick=async()=>{
+  $('pl').disabled=true;
+  try{R=await api('start_round');me.energy.energy=R.energy_left;begin(R.seed)}catch(e){toast(msg(e))}
+  $('pl').disabled=false;
+};
+$('adb').onclick=async()=>{
+  if(!ADSGRAM_BLOCK_ID||!window.Adsgram){toast('Ads are not set up yet');return}
+  let s;try{s=await api('ad_start',{network:'adsgram'})}catch(e){return toast(msg(e))}
+  try{await window.Adsgram.init({blockId:ADSGRAM_BLOCK_ID}).show()}catch(e){return toast('Ad was not completed')}
+  const before=me.energy.energy;
+  for(let i=0;i<6;i++){await sleep(1500);await refresh().catch(()=>{});if(me.energy.energy>before)return toast('+1 ⚡')}
+  toast('Energy will arrive in a moment');
+};
+$('sw').onclick=()=>{
+  const t=me.token,w=me.wallet,fee=t.swap_fee_bps/10000;
+  panel('<h3>Swap 💛 to '+esc(t.symbol)+'</h3><p>'+t.yellow_per_pxn+' 💛 = 1 '+esc(t.symbol)+(fee?' · fee '+(fee*100)+'%':'')+'</p><p>You have 💛 '+w.yellow+' · minimum '+t.min_swap_yellow+'</p><input id="sa" type="number" inputmode="numeric" placeholder="Amount of 💛"><p id="sp"></p><button class="big" id="sg">Swap</button>');
+  $('sa').oninput=()=>{const v=+$('sa').value||0;$('sp').textContent='You get ≈ '+(v/t.yellow_per_pxn*(1-fee)).toFixed(4)+' '+t.symbol};
+  $('sg').onclick=async()=>{
+    const v=Math.floor(+$('sa').value);if(!(v>0))return toast('Enter an amount');
+    try{const r=await api('swap',{yellow:v});await refresh();toast('Swapped · +'+r.pxn+' '+t.symbol);$('panel').style.display='none'}catch(e){toast(msg(e))}
+  };
+};
+$('wd').onclick=()=>{
+  const t=me.token,w=me.wallet,L=(me.withdrawals||[]).map(x=>'<div><span>'+(+x.pxn_amount)+' '+esc(t.symbol)+'</span><span>'+esc(x.status)+(x.reject_reason?' · '+esc(x.reject_reason):'')+'</span></div>').join('');
+  panel('<h3>Withdraw '+esc(t.symbol)+'</h3><p>Balance: '+(+w.pxn).toFixed(4)+' '+esc(t.symbol)+'. Requests are reviewed by hand.</p><input id="wa" type="number" inputmode="decimal" placeholder="Amount"><input id="wt" placeholder="Your TON wallet address (EQ… / UQ…)"><button class="big" id="wg">Request withdrawal</button><div class="list">'+L+'</div>');
+  $('wg').onclick=async()=>{
+    const a=+$('wa').value,ad=$('wt').value.trim();if(!(a>0)||!ad)return toast('Enter amount and address');
+    try{await api('withdraw',{pxn:a,address:ad});await refresh();toast('Request sent');$('panel').style.display='none'}catch(e){toast(msg(e))}
+  };
+};
+$('lb').onclick=async()=>{
+  try{const r=await api('leaderboard');
+    panel('<h3>Top players</h3><div class="list">'+(r.top.length?r.top.map(x=>'<div><span>'+x.rank+'. '+esc(x.username||x.first_name||'Player')+'</span><span>'+x.score+'</span></div>').join(''):'<p>No scores yet this season.</p>')+'</div>');
+  }catch(e){toast(msg(e))}
+};
+$('ob').onclick=()=>{showMenu();refresh().catch(()=>{})};
+
+// ---------- map (MUST match server layout.ts) ----------
+const W=640,S=6,WS=3840,N_ITEMS=4200;
+function mb(a){return()=>{a|=0;a=(a+0x6D2B79F5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296}}
+function genLayout(seed){
+  const r=mb(seed);
+  const start={x:400+r()*(WS-800),y:400+r()*(WS-800),a:r()*6.28},items=[];
+  for(let n=0;n<N_ITEMS;n++){
+    const x=40+r()*(WS-80),y=40+r()*(WS-80),q=r(),rot=r()*6;
+    if(Math.hypot(x-start.x,y-start.y)<90)continue;
+    items.push({i:n,x,y,rot,t:q<.02?'gold':q<.12?'score':q<.32?'cash':q<.52?'sky':'stone'});
+  }
+  return{start,items};
+}
+
+// ---------- game ----------
+const C=$('c'),X=C.getContext('2d');
 const wc=document.createElement('canvas');wc.width=wc.height=W;const wx=wc.getContext('2d');
 let vw,vh;function rs(){vw=C.width=innerWidth;vh=C.height=innerHeight}rs();onresize=rs;
+let SEED=0;
 const h=(a,b)=>{let n=Math.sin(a*127.1+b*311.7+7+SEED)*43758.5;return n-Math.floor(n)};
 const tones=['#7a6f66','#8a7e74','#6b6159','#948579'];
-let dug,items,P,fx,txt,st,SEED=0;
+let dug,items=[],P={x:0,y:0,a:0,roll:0,hp:100,score:0,cash:0,sky:0,gold:0,shake:0},fx=[],txt=[],st=0,ev=[],gt=0;
 const rnd=Math.random;
-function start(){
-  dug=new Uint8Array(W*W);SEED=rnd()*1000;
+function begin(seed){
+  dug=new Uint8Array(W*W);SEED=seed%1000;
   for(let j=0;j<W;j++)for(let i=0;i<W;i++){
     wx.fillStyle=tones[Math.floor(h(i>>2,j>>2)*4)];
     if(h(i,j)>.85)wx.fillStyle=tones[2];
     wx.fillRect(i,j,1,1);
   }
-  P={x:400+rnd()*(WS-800),y:400+rnd()*(WS-800),a:rnd()*6.28,roll:0,hp:100,score:0,cash:0,sky:0,gold:0,vx:0,vy:-1,shake:0};
-  items=[];fx=[];txt=[];
-  // 5% gold, 10% score, 20% cash, 20% sky, 45% stone
-  for(let n=0;n<4200;n++){
-    const x=40+rnd()*(WS-80),y=40+rnd()*(WS-80);
-    if(Math.hypot(x-P.x,y-P.y)<90)continue;
-    const r=rnd();
-    const t=r<.02?'gold':r<.12?'score':r<.32?'cash':r<.52?'sky':'stone';
-    items.push({x,y,t,rot:rnd()*6});
-  }
+  const L=genLayout(seed);
+  P={x:L.start.x,y:L.start.y,a:L.start.a,roll:0,hp:100,score:0,cash:0,sky:0,gold:0,shake:0};
+  items=L.items;fx=[];txt=[];ev=[];gt=0;
   dig();upd();
-  document.getElementById('over').style.display='none';st=1;
+  document.body.className='play';$('menu').style.display='none';$('over').style.display='none';st=1;
 }
 function dig(){
   const cx=Math.floor(P.x/S),cy=Math.floor(P.y/S),r=4;
@@ -58,19 +181,29 @@ function dig(){
   }
 }
 function upd(){
-  document.getElementById('hpf').style.width=Math.max(0,P.hp)+'%';
-  sc.textContent='Score '+P.score;cs.textContent='💵'+P.cash;sk.textContent='💎'+P.sky;gd.textContent='⭐'+P.gold;
+  $('hpf').style.width=Math.max(0,P.hp)+'%';
+  $('sc').textContent='Score '+P.score;$('cs').textContent='💵'+P.cash;$('sk').textContent='💠'+P.sky;$('gd').textContent='💛'+P.gold;
 }
 function pop(x,y,s,c){txt.push({x,y,s,c,l:1})}
 function burst(x,y,c,n){for(let i=0;i<n;i++)fx.push({x,y,vx:(rnd()-.5)*200,vy:(rnd()-.5)*200,l:.6,c})}
+async function sub(){
+  $('rb').style.display='none';$('fin').textContent='Checking your round…';$('over').style.display='flex';
+  try{
+    const r=await api('finish_round',{round_id:R.round_id,duration_ms:Math.round(gt),events:ev});
+    $('fin').textContent=r.ok?'Score '+r.score+' | 💵'+r.cash+' | 💠'+r.blue+' | 💛'+r.yellow:'This round could not be verified. No reward was given.';
+  }catch(e){$('fin').textContent=msg(e);$('rb').style.display='block'}
+}
+$('rb').onclick=sub;
+
 // input
-let jx=0,jy=0;const base=document.getElementById('base'),knob=document.getElementById('knob');let act=false;
+let jx=0,jy=0;const base=$('base'),knob=$('knob');let act=false;
 function jm(e){const b=base.getBoundingClientRect();let dx=e.clientX-(b.left+70),dy=e.clientY-(b.top+70);const d=Math.hypot(dx,dy),m=60;
-  if(d>m){dx*=m/d;dy*=m/d}jx=dx/m;jy=dy/m;knob.style.transform=`translate(${dx}px,${dy}px)`}
+  if(d>m){dx*=m/d;dy*=m/d}jx=dx/m;jy=dy/m;knob.style.transform='translate('+dx+'px,'+dy+'px)'}
 base.onpointerdown=e=>{act=true;base.setPointerCapture(e.pointerId);jm(e)};
 base.onpointermove=e=>{if(act)jm(e)};
 base.onpointerup=base.onpointercancel=()=>{act=false;jx=jy=0;knob.style.transform=''};
 const K={};onkeydown=e=>K[e.key.toLowerCase()]=1;onkeyup=e=>K[e.key.toLowerCase()]=0;
+
 // loop
 let last=performance.now();
 function loop(t){
@@ -82,22 +215,24 @@ function loop(t){
     if(m>.1){const a=Math.atan2(iy,ix);let da=a-P.a;da=Math.atan2(Math.sin(da),Math.cos(da));P.a+=da*Math.min(1,dt*8)}
     const nx=P.x+Math.cos(P.a)*90*dt,ny=P.y+Math.sin(P.a)*90*dt;
     if(nx<30||nx>WS-30||ny<30||ny>WS-30){P.a+=Math.PI*.75}else{P.x=nx;P.y=ny}
-    P.roll+=10*dt;dig();
+    gt+=dt*1000;P.roll+=10*dt;dig();
     for(const it of items){if(it.d)continue;
-      if(Math.hypot(it.x-P.x,it.y-P.y)<26){it.d=1;
+      if(Math.abs(it.x-P.x)>30||Math.abs(it.y-P.y)>30)continue;
+      if(Math.hypot(it.x-P.x,it.y-P.y)<26){it.d=1;ev.push({i:it.i,t:Math.round(gt)});
         if(it.t=='stone'){P.hp-=10;P.shake=.3;burst(it.x,it.y,'#d9622b',14);pop(it.x,it.y,'-10 HP','#ff6a5a')}
         else if(it.t=='cash'){P.cash+=1;burst(it.x,it.y,'#7dd35a',10);pop(it.x,it.y,'+1','#f6c98f')}
         else if(it.t=='score'){P.score+=5;burst(it.x,it.y,'#fff',10);pop(it.x,it.y,'+5','#fff')}
         else if(it.t=='sky'){P.sky++;P.score+=30;burst(it.x,it.y,'#5fd4ff',12);pop(it.x,it.y,'+30','#7fe3ff')}
         else{P.gold++;P.score+=100;burst(it.x,it.y,'#ffe14a',20);pop(it.x,it.y,'+100','#ffe14a')}
         upd();
-        if(P.hp<=0){st=0;fin.textContent='Score '+P.score+' | 💵'+P.cash+' | 💎'+P.sky+' | ⭐'+P.gold;document.getElementById('over').style.display='flex'}
+        if(P.hp<=0){st=0;sub();break}   // stop at death: no pickups after the last stone
       }}
     P.shake=Math.max(0,P.shake-dt);
   }
   for(const f of fx){f.x+=f.vx*dt;f.y+=f.vy*dt;f.l-=dt}fx=fx.filter(f=>f.l>0);
   for(const f of txt){f.y-=30*dt;f.l-=dt}txt=txt.filter(f=>f.l>0);
-  draw(t/1000);requestAnimationFrame(loop);
+  if(items.length)draw(t/1000);
+  requestAnimationFrame(loop);
 }
 function tri(x,y,r,rot,c){X.fillStyle=c;X.beginPath();for(let k=0;k<3;k++){const a=rot+k*2.1;X.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r)}X.fill()}
 function diamond(x,y,r,c,c2){X.fillStyle=c;X.beginPath();X.moveTo(x,y-r);X.lineTo(x+r*.8,y);X.lineTo(x,y+r);X.lineTo(x-r*.8,y);X.fill();X.fillStyle=c2;X.fillRect(x-2,y-r*.5,3,3)}
@@ -108,7 +243,7 @@ function draw(t){
   {const x0=Math.max(0,Math.floor((P.x-sx)/S)),y0=Math.max(0,Math.floor((P.y-sy)/S)),x1=Math.min(W,Math.ceil((P.x+vw-sx)/S)),y1=Math.min(W,Math.ceil((P.y+vh-sy)/S));X.drawImage(wc,x0,y0,x1-x0,y1-y0,x0*S,y0*S,(x1-x0)*S,(y1-y0)*S)}
   for(const it of items){if(it.d)continue;
     if(Math.abs(it.x-P.x)>150||Math.abs(it.y-P.y)>150)continue;
-    const {x,y}=it;
+    const{x,y}=it;
     if(it.t=='stone')tri(x,y,15,it.rot,'#d9622b');
     else if(it.t=='cash'){X.fillStyle='#4aa83a';X.fillRect(x-12,y-7,24,14);X.fillStyle='#bff0a0';X.fillRect(x-3,y-3,6,6)}
     else if(it.t=='score'){X.fillStyle='#fff';X.fillRect(x-3,y-9,6,18);X.fillRect(x-9,y-3,18,6)}
@@ -116,7 +251,6 @@ function draw(t){
     else{const p=1+Math.sin(t*6)*.2;X.shadowColor='#ffe14a';X.shadowBlur=14;diamond(x,y,12*p,'#ffd21a','#fff7b0');X.shadowBlur=0}
   }
   for(const f of fx){X.fillStyle=f.c;X.fillRect(f.x,f.y,4,4)}
-  // drill
   X.save();X.translate(P.x,P.y);
   X.rotate(P.a);X.fillStyle='#e0b48a';X.beginPath();X.moveTo(22,0);X.lineTo(8,-8);X.lineTo(8,8);X.fill();
   X.fillStyle='#b88a62';X.fillRect(12,-1,6,2);
@@ -126,10 +260,16 @@ function draw(t){
   X.restore();
   for(const f of txt){X.globalAlpha=Math.max(0,f.l);X.fillStyle=f.c;X.font='bold 14px monospace';X.fillText(f.s,f.x-14,f.y-14)}
   X.globalAlpha=1;X.restore();
-  // fog of war: sirf drill ke aas-paas visible
-  const g=X.createRadialGradient(sx,sy,45,sx,sy,125);
+  const g=X.createRadialGradient(sx,sy,45,sx,sy,125);   // fog of war
   g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,1)');
   X.fillStyle=g;X.fillRect(0,0,vw,vh);
 }
-start();requestAnimationFrame(loop);
+
+// ---------- boot ----------
+requestAnimationFrame(loop);
+(async()=>{
+  if(PROJECT_ID==='YOUR_PROJECT_ID'){$('lt').textContent='Set PROJECT_ID in index.html first.';return}
+  try{await login();await refresh();$('load').style.display='none';$('menu').style.display='flex'}
+  catch(e){$('lt').textContent=msg(e)}
+})();
 </script></body></html>
