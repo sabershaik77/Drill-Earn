@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Drill & Earn Admin</title>
+<style>
+:root{--bg:#17130d;--p:#241d14;--p2:#33281b;--ln:#4a3b28;--fg:#f2e6d0;--mut:#a89a82;--gold:#ffd21a;--grn:#6cc04a;--red:#e0584a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 ui-sans-serif,system-ui,sans-serif}
+#app{display:none;grid-template-columns:190px 1fr;min-height:100vh}
+nav{background:var(--p);border-right:1px solid var(--ln);padding:12px 8px;position:sticky;top:0;height:100vh;overflow:auto}
+nav b{display:block;padding:6px 10px 12px;color:var(--gold);font-size:16px}
+nav a{display:block;padding:8px 10px;color:var(--fg);text-decoration:none;border-radius:4px}
+nav a.on{background:var(--p2);color:var(--gold)}
+main{padding:18px;min-width:0}
+header{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+h1{font-size:20px;margin:0}h3,h4{margin:16px 0 8px}
+.mut{color:var(--mut)}.err{color:var(--red)}
+.tw{overflow:auto;border:1px solid var(--ln);margin-bottom:10px}
+table{border-collapse:collapse;width:100%;white-space:nowrap}
+th,td{padding:7px 10px;border-bottom:1px solid var(--ln);text-align:left}
+th{background:var(--p);color:var(--mut);font-weight:600}
+.ac{display:flex;gap:6px}
+button,input,select,textarea{font:inherit;color:var(--fg);background:var(--p2);border:1px solid var(--ln);padding:7px 11px;border-radius:4px}
+button{cursor:pointer}button.pri{background:var(--grn);color:#102008;border-color:var(--grn);font-weight:600}button.dg{color:var(--red)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.c{background:var(--p);border:1px solid var(--ln);padding:14px;display:flex;flex-direction:column;gap:2px}
+.c b{font-size:22px;color:var(--gold)}.c span{color:var(--mut)}
+.tag{padding:2px 8px;border-radius:9px;background:var(--p2)}
+.s-pending,.s-open,.s-flagged{color:var(--gold)}.s-paid,.s-approved,.s-active,.s-confirmed,.s-sold{color:var(--grn)}.s-rejected,.s-failed,.s-banned{color:var(--red)}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}
+#mb{background:var(--p);border:1px solid var(--ln);padding:18px;width:100%;max-width:780px}
+.fm{display:grid;gap:10px;margin:12px 0}.fm label{display:grid;gap:4px;color:var(--mut)}
+.fm input[type=checkbox]{width:auto;justify-self:start}.fm textarea{min-height:70px;font-family:ui-monospace,monospace}
+pre{background:var(--bg);padding:10px;overflow:auto;max-height:240px;margin:6px 0}
+#toast{position:fixed;right:16px;bottom:16px;background:var(--gold);color:#201800;padding:9px 14px;border-radius:4px;display:none;max-width:80%}
+#login{max-width:340px;margin:12vh auto;padding:20px;background:var(--p);border:1px solid var(--ln);display:grid;gap:10px}
+@media(max-width:720px){#app{grid-template-columns:1fr}nav{position:static;height:auto;display:flex;overflow:auto;border:0}nav b{display:none}nav a{white-space:nowrap}}
+</style></head><body>
+
+<form id="login"><h3 style="margin:0;color:var(--gold)">Drill & Earn Admin</h3>
+  <input id="em" type="email" placeholder="Email" autocomplete="username" required>
+  <input id="pw" type="password" placeholder="Password" autocomplete="current-password" required>
+  <button class="pri">Sign in</button><div id="le" class="err"></div></form>
+
+<div id="app"><nav id="nav"></nav><main>
+  <header><h1 id="ttl"></h1><div class="bar" style="margin:0"><span id="who" class="mut"></span><button data-a="out">Sign out</button></div></header>
+  <div id="view"></div></main></div>
+<div id="modal"><div id="mb"></div></div><div id="toast"></div>
+
+<script>
+// ============ SETTINGS (edit these two) ============
+const PROJECT_ID='YOUR_PROJECT_ID';
+const ANON_KEY='YOUR_ANON_KEY';   // Supabase > Project Settings > API Keys > anon / publishable key (safe to be public)
+// ====================================================
+const BASE='https://'+PROJECT_ID+'.supabase.co',PER=25;
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let S=JSON.parse(sessionStorage.getItem('s')||'null'),cur='dashboard';const ST={},H={};
+const DF={withdrawals:'pending',anticheat:'open',market:'active'};
+
+// ---------- auth + api ----------
+async function auth(body,grant){
+  const r=await fetch(BASE+'/auth/v1/token?grant_type='+grant,{method:'POST',headers:{'Content-Type':'application/json',apikey:ANON_KEY},body:JSON.stringify(body)});
+  const j=await r.json();if(!r.ok)throw new Error(j.error_description||j.msg||'Sign in failed');
+  S={access:j.access_token,refresh:j.refresh_token,email:j.user.email};sessionStorage.setItem('s',JSON.stringify(S));
+}
+async function A(action,data={},retry){
+  const r=await fetch(BASE+'/functions/v1/admin',{method:'POST',headers:{'Content-Type':'application/json',apikey:ANON_KEY,Authorization:'Bearer '+S.access},body:JSON.stringify(Object.assign({action},data))});
+  let j={};try{j=await r.json()}catch(e){}
+  if(r.status===401&&!retry){try{await auth({refresh_token:S.refresh},'refresh_token')}catch(e){signOut();throw new Error('Session expired')}return A(action,data,true)}
+  if(!r.ok||j.error)throw new Error(j.error||j.message||'Request failed');
+  return j;
+}
+function signOut(){sessionStorage.clear();S=null;$('#app').style.display='none';$('#login').style.display='grid'}
+H.out=signOut;
+$('#login').onsubmit=async e=>{e.preventDefault();$('#le').textContent='';
+  try{await auth({email:$('#em').value.trim(),password:$('#pw').value},'password');await enter()}catch(x){$('#le').textContent=x.message}};
+async function enter(){
+  try{await A('dashboard')}catch(e){if(e.message==='forbidden'){signOut();$('#le').textContent='This account is not an admin.';return}throw e}
+  let role='';try{const r=await A('read',{table:'admin_users',eq:{email:S.email}});role=r.rows[0]&&r.rows[0].role||''}catch(e){}
+  $('#who').textContent=S.email+(role?' · '+role:'');
+  $('#login').style.display='none';$('#app').style.display='grid';route();
+}
+
+// ---------- helpers ----------
+const dt=v=>v?new Date(v).toLocaleString([],{dateStyle:'short',timeStyle:'short'}):'–';
+const fmtN=v=>v==null?'–':isNaN(v)?v:Number(v).toLocaleString(undefined,{maximumFractionDigits:6});
+const get=(r,k)=>{if(k==='@p'){const p=r.players||{};return p.username?'@'+p.username:p.first_name||'?'}return k.split('.').reduce((o,p)=>o==null?o:o[p],r)};
+function fmt(k,v){
+  if(v==null)return '–';
+  if(typeof v==='boolean')return v?'✓':'–';
+  if(typeof v==='object'){const s=JSON.stringify(v);return esc(s.length>70?s.slice(0,70)+'…':s)}
+  if(/_at$/.test(k))return dt(v);
+  if(k==='status')return '<span class="tag s-'+esc(v)+'">'+esc(v)+'</span>';
+  const s=String(v);return esc(s.length>40?s.slice(0,16)+'…'+s.slice(-4):s);
+}
+function table(cols,rows,act){
+  if(!rows.length)return '<p class="mut">Nothing here yet.</p>';
+  return '<div class="tw"><table><tr>'+cols.map(c=>'<th>'+c[1]+'</th>').join('')+(act?'<th></th>':'')+'</tr>'+
+    rows.map(r=>'<tr>'+cols.map(c=>'<td>'+fmt(c[0],get(r,c[0]))+'</td>').join('')+(act?'<td><div class="ac">'+act(r)+'</div></td>':'')+'</tr>').join('')+'</table></div>';
+}
+const btn=(a,op,id,l,cls)=>'<button class="'+(cls||'')+'" data-a="'+a+'" data-op="'+op+'" data-id="'+id+'">'+l+'</button>';
+const card=(v,l)=>'<div class="c"><b>'+esc(fmtN(v))+'</b><span>'+l+'</span></div>';
+const tabs=(o,sel)=>'<div class="bar">'+o.map(x=>'<button class="'+(x===sel?'pri':'')+'" data-a="tab" data-v="'+x+'">'+x+'</button>').join('')+'</div>';
+const pager=(s,total)=>'<div class="bar"><button data-a="pg" data-d="-1" '+(s.p?'':'disabled')+'>Prev</button><span class="mut">Page '+(s.p+1)+' of '+Math.max(1,Math.ceil(total/PER))+' · '+total+' rows</span><button data-a="pg" data-d="1" '+((s.p+1)*PER<total?'':'disabled')+'>Next</button></div>';
+function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',3000)}
+function modal(h){$('#mb').innerHTML=h;$('#modal').style.display='flex'}
+const closeM=()=>$('#modal').style.display='none';
+$('#modal').onclick=e=>{if(e.target.id==='modal')closeM()};H.close=closeM;
+document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(b&&H[b.dataset.a])H[b.dataset.a](b)});
+const act=async(fn,ok)=>{try{await fn();if(ok)toast(ok);closeM();load()}catch(e){toast(e.message)}};
+
+// ---------- navigation ----------
+const NAV=[['dashboard','Dashboard'],['players','Players'],['withdrawals','Withdrawals'],['anticheat','Anti-cheat'],['tasks','Earn tasks'],['rewards','Rewards'],['leaderboard','Leaderboard'],['token','Token'],['store','Store'],['drills','Drills'],['market','Marketplace'],['audit','Audit log'],['settings','Settings']];
+function route(){
+  cur=location.hash.slice(1);if(!NAV.some(n=>n[0]===cur))cur='dashboard';
+  ST[cur]=ST[cur]||{p:0,q:'',f:DF[cur]||''};
+  $('#nav').innerHTML='<b>⛏ Drill & Earn</b>'+NAV.map(n=>'<a href="#'+n[0]+'" class="'+(n[0]===cur?'on':'')+'">'+n[1]+'</a>').join('');
+  load();
+}
+onhashchange=()=>{if(S)route()};
+async function load(){
+  const v=$('#view');$('#ttl').textContent=NAV.find(n=>n[0]===cur)[1];v.innerHTML='<p class="mut">Loading…</p>';
+  try{await SEC[cur](v)}catch(e){v.innerHTML='<p class="err">'+esc(e.message)+'</p>'}
+}
+H.pg=b=>{ST[cur].p=Math.max(0,ST[cur].p+Number(b.dataset.d));load()};
+H.tab=b=>{ST[cur].f=b.dataset.v;ST[cur].p=0;load()};
+
+// ---------- sections ----------
+const SEC={};
+SEC.dashboard=async v=>{
+  const d=await A('dashboard'),L={total_players:'Players',dau:'Active (24h)',rounds_24h:'Rounds (24h)',yellow_minted_24h:'💛 earned (24h)',yellow_in_circulation:'💛 in wallets',pending_withdrawals:'Pending withdrawals',pending_pxn:'Pending PXN',open_flags:'Open flags',banned_players:'Banned players'};
+  v.innerHTML='<div class="cards">'+Object.keys(L).map(k=>card(d[k],L[k])).join('')+'</div><div class="bar" style="margin-top:14px"><button data-a="reload">Refresh</button></div>';
+};
+H.reload=load;
+
+SEC.players=async v=>{
+  const s=ST.players,d=await A('read',{table:'players',search:s.q||undefined,order:'created_at',limit:PER,offset:s.p*PER});
+  v.innerHTML='<div class="bar"><input id="q" placeholder="Search username or name" value="'+esc(s.q)+'"><button data-a="psearch">Search</button></div>'+
+    table([['username','Username'],['first_name','Name'],['tg_id','Telegram ID'],['status','Status'],['trust_score','Trust'],['energy','Energy'],['created_at','Joined'],['last_seen_at','Last seen']],d.rows,r=>'<button data-a="pview" data-id="'+r.id+'">Open</button>')+pager(s,d.total);
+};
+H.psearch=()=>{ST.players.q=$('#q').value.trim();ST.players.p=0;load()};
+H.pview=async b=>{try{
+  const d=await A('player',{id:b.dataset.id}),p=d.player,w=[].concat(p.player_wallets||[])[0]||{},dv=[].concat(p.player_devices||[]);
+  modal('<h3 style="margin-top:0">'+esc(p.username?'@'+p.username:p.first_name)+' <span class="tag s-'+p.status+'">'+p.status+'</span></h3>'+
+    '<div class="cards">'+card(p.trust_score,'Trust')+card(p.energy,'Energy')+card(w.yellow,'💛 Yellow')+card(w.pxn,'PXN')+card(w.cash,'💵 Cash')+card(w.blue,'💠 Blue')+'</div>'+
+    '<p class="mut">Telegram ID '+p.tg_id+' · joined '+dt(p.created_at)+' · '+dv.length+' device(s)'+(p.ton_wallet?' · wallet '+esc(p.ton_wallet):'')+'</p>'+
+    '<div class="bar">'+(p.status==='banned'?'<button class="pri" data-a="ban" data-b="0" data-id="'+p.id+'">Unban</button>':'<button class="dg" data-a="ban" data-b="1" data-id="'+p.id+'">Ban player</button>')+'<button data-a="close">Close</button></div>'+
+    '<h4>Flags</h4>'+table([['created_at','When'],['rule','Rule'],['severity','Sev'],['status','Status']],d.flags)+
+    '<h4>Recent rounds</h4>'+table([['started_at','Started'],['status','Status'],['duration_ms','ms'],['score','Score'],['yellow','💛']],d.rounds.slice(0,10))+
+    '<h4>Ledger</h4>'+table([['created_at','When'],['currency','Cur'],['amount','Amount'],['kind','Kind']],d.ledger.slice(0,15))+
+    '<h4>Withdrawals</h4>'+table([['created_at','When'],['pxn_amount','PXN'],['status','Status']],d.withdrawals));
+}catch(e){toast(e.message)}};
+H.ban=b=>{const on=b.dataset.b==='1',reason=prompt(on?'Reason for ban?':'Reason for unban?');if(reason===null||(on&&!reason))return;
+  act(()=>A('ban',{player_id:b.dataset.id,ban:on,reason:reason||'unban'}),on?'Banned':'Unbanned')};
+
+SEC.withdrawals=async v=>{
+  const s=ST.withdrawals,d=await A('read',{table:'withdrawals',select:'*,players(username,first_name)',eq:s.f==='all'?{}:{status:s.f},order:'created_at',limit:PER,offset:s.p*PER});
+  v.innerHTML=tabs(['pending','approved','paid','rejected','failed','all'],s.f)+
+    table([['created_at','Requested'],['@p','Player'],['pxn_amount','PXN'],['to_address','Address'],['risk_score','Risk'],['status','Status'],['reject_reason','Note'],['tx_hash','Tx']],d.rows,
+      r=>r.status==='pending'?btn('wd','approve',r.id,'Approve','pri')+btn('wd','reject',r.id,'Reject','dg'):r.status==='approved'?btn('wd','paid',r.id,'Mark paid','pri')+btn('wd','failed',r.id,'Failed','dg'):'')+pager(s,d.total);
+};
+H.wd=b=>{const op=b.dataset.op;let reason,tx;
+  if(op==='approve'&&!confirm('Approve this withdrawal?'))return;
+  if(op==='reject'){reason=prompt('Reject reason (player will see it)');if(!reason)return}
+  if(op==='paid'){tx=prompt('TON transaction hash');if(!tx)return}
+  if(op==='failed'){reason=prompt('Why did the payout fail? PXN will be refunded.');if(!reason)return}
+  act(()=>A('review_withdrawal',{id:b.dataset.id,op,reason,tx_hash:tx}),'Done')};
+
+SEC.anticheat=async v=>{
+  const s=ST.anticheat,d=await A('read',{table:'anticheat_flags',select:'*,players(username,first_name,status)',eq:s.f==='all'?{}:{status:s.f},order:'created_at',limit:PER,offset:s.p*PER});
+  v.innerHTML=tabs(['open','confirmed','dismissed','all'],s.f)+
+    table([['created_at','When'],['@p','Player'],['players.status','Account'],['rule','Rule'],['severity','Sev'],['details','Details'],['status','Status']],d.rows,
+      r=>(r.status==='open'?btn('flag','confirmed',r.id,'Confirm')+btn('flag','dismissed',r.id,'Dismiss'):'')+(r.players&&r.players.status!=='banned'?'<button class="dg" data-a="ban" data-b="1" data-id="'+r.player_id+'">Ban</button>':''))+pager(s,d.total);
+};
+H.flag=b=>act(()=>A('resolve_flag',{id:b.dataset.id,status:b.dataset.op}),'Updated');
+
+// ---- generic editor for catalog tables ----
+const CUR=['yellow','cash','blue','pxn'];
+const T=(k,l,r)=>({k,l,t:'t',r}),N=(k,l,r,d)=>({k,l,t:'n',r,d}),B=(k,l,d)=>({k,l,t:'b',d:d!==false}),Sel=(k,l,o)=>({k,l,t:'s',o}),J=(k,l,d,r)=>({k,l,t:'j',d,r}),D=(k,l,r)=>({k,l,t:'d',r});
+const NOTE='Saved live to the database. Players can use this in the game once the matching game feature is added.';
+const CF={
+ tasks:{t:'earn_tasks',one:'task',pk:'id',note:NOTE,cols:[['id','ID'],['title','Title'],['task_type','Type'],['reward_currency','Currency'],['reward_amount','Reward'],['is_daily','Daily'],['is_active','Active']],
+  f:[T('title','Title',1),Sel('task_type','Type',['join_channel','follow_link','invite','daily_checkin','custom']),T('url','Link'),Sel('verify_mode','Verify',['telegram_member','callback','manual']),Sel('reward_currency','Reward currency',CUR),N('reward_amount','Reward amount',1,0),B('is_daily','Repeats daily',false),B('is_active','Active'),D('starts_at','Starts'),D('ends_at','Ends')]},
+ rewards:{t:'rewards',one:'reward',pk:'id',note:NOTE,cols:[['id','ID'],['name','Name'],['reward_type','Type'],['code','Code'],['currency','Currency'],['amount','Amount'],['used_count','Used'],['is_active','Active']],
+  f:[T('name','Name',1),Sel('reward_type','Type',['daily_login','streak','promo_code','season_prize','custom']),T('code','Promo code (optional)'),Sel('currency','Currency',CUR),N('amount','Amount',1,0),N('max_uses','Max uses'),J('config','Config (JSON)','{}'),B('is_active','Active'),D('expires_at','Expires')]},
+ leaderboard:{t:'leaderboard_seasons',one:'season',pk:'id',cols:[['id','ID'],['name','Name'],['starts_at','Starts'],['ends_at','Ends'],['status','Status']],
+  x:r=>btn('scores','',r.id,'Scores'),
+  f:[T('name','Season name',1),D('starts_at','Starts',1),D('ends_at','Ends',1),Sel('status','Status',['upcoming','active','ended']),J('prize_pool','Prizes (JSON list)','[]')]},
+ store:{t:'store_items',one:'item',pk:'id',note:NOTE,cols:[['id','ID'],['sku','SKU'],['name','Name'],['item_type','Type'],['price_currency','Currency'],['price_amount','Price'],['stock','Stock'],['is_active','Active']],
+  f:[T('sku','SKU (unique)',1),T('name','Name',1),Sel('item_type','Type',['drill','energy_pack','boost']),Sel('price_currency','Price currency',CUR),N('price_amount','Price',1,0),J('payload','Payload (JSON, e.g. {"drill_id":1})','{}'),N('stock','Stock (empty = unlimited)'),B('is_active','Active'),D('starts_at','Starts'),D('ends_at','Ends')]},
+ drills:{t:'drills',one:'drill',pk:'id',note:NOTE,cols:[['id','ID'],['name','Name'],['rarity','Rarity'],['speed_mult','Speed x'],['hp_bonus','HP +'],['tradable','Tradable'],['is_active','Active']],
+  f:[T('name','Name',1),T('description','Description'),Sel('rarity','Rarity',['common','rare','epic','legendary']),N('speed_mult','Speed multiplier',1,1),N('hp_bonus','HP bonus',1,0),N('yellow_cap_bonus','Yellow cap bonus',1,0),N('max_level','Max level',1,1),T('image_url','Image URL'),B('tradable','Tradable'),B('is_active','Active')]},
+ settings:{t:'app_settings',one:'setting',pk:'key',nodel:1,note:'Owner only. These limits are used by the game server immediately.',cols:[['key','Key'],['value','Value'],['description','Description'],['updated_at','Updated']],
+  f:[T('key','Key',1),J('value','Value (JSON: number, true/false or "text")','',1),T('description','Description')]},
+ token:{t:'token_config',one:'token settings',pk:'id',
+  f:[T('symbol','Symbol',1),T('network','Network',1),T('jetton_master','Jetton master address'),N('decimals','Decimals',1,9),N('swap_fee_bps','Swap fee (basis points, 100 = 1%)',1,0),N('min_swap_yellow','Minimum swap (💛)',1,1000),B('swap_enabled','Swap enabled')]}
+};
+const loc=v=>{const d=new Date(v);return new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,16)};
+function openForm(n,row){
+  const c=CF[n],nw=!row;row=row||{};
+  const inp=x=>{let v=row[x.k];if(nw&&v===undefined)v=x.d;const a='data-k="'+x.k+'"';
+    if(x.t==='b')return '<input type="checkbox" '+a+(v?' checked':'')+'>';
+    if(x.t==='s')return '<select '+a+'>'+x.o.map(o=>'<option'+(o===v?' selected':'')+'>'+o+'</option>').join('')+'</select>';
+    if(x.t==='j')return '<textarea '+a+'>'+esc(v==null?(x.d||''):typeof v==='string'&&nw?v:JSON.stringify(v))+'</textarea>';
+    if(x.t==='d')return '<input type="datetime-local" '+a+' value="'+(v?loc(v):'')+'">';
+    return '<input '+a+' type="'+(x.t==='n'?'number" step="any':'text')+'" value="'+esc(v==null?'':v)+'"'+(x.k===c.pk&&!nw?' disabled':'')+'>';};
+  modal('<h3 style="margin-top:0">'+(nw?'New ':'Edit ')+c.one+'</h3><div class="fm">'+c.f.map(x=>'<label>'+x.l+(x.r?' *':'')+inp(x)+'</label>').join('')+'</div><div class="bar"><button class="pri" id="sv">Save</button><button data-a="close">Cancel</button></div>');
+  $('#sv').onclick=()=>{
+    const out={};if(!nw&&row[c.pk]!==undefined)out[c.pk]=row[c.pk];
+    try{for(const x of c.f){const el=document.querySelector('[data-k="'+x.k+'"]');let v;
+      if(x.t==='b')v=el.checked;
+      else if(el.disabled)v=row[x.k];
+      else{const raw=el.value.trim();
+        if(x.r&&raw==='')throw new Error(x.l+' is required');
+        if(raw==='')v=null;
+        else if(x.t==='n')v=Number(raw);
+        else if(x.t==='d')v=new Date(raw).toISOString();
+        else if(x.t==='j'){try{v=JSON.parse(raw)}catch(e){throw new Error(x.l+': invalid JSON')}}
+        else v=raw}
+      out[x.k]=v}}catch(e){return toast(e.message)}
+    act(()=>A('crud',{table:c.t,op:'upsert',row:out}),'Saved');
+  };
+}
+function crud(n){const c=CF[n];return async v=>{
+  const d=await A('read',{table:c.t,order:c.pk,asc:c.pk==='key',limit:100});c.rows=d.rows;
+  v.innerHTML='<div class="bar"><button class="pri" data-a="new" data-n="'+n+'">+ New '+c.one+'</button><span class="mut">'+(c.note||'')+'</span></div>'+
+    table(c.cols,d.rows,r=>(c.x?c.x(r):'')+'<button data-a="edit" data-n="'+n+'" data-id="'+esc(r[c.pk])+'">Edit</button>'+(c.nodel?'':'<button class="dg" data-a="del" data-n="'+n+'" data-id="'+esc(r[c.pk])+'">Delete</button>'));
+}}
+['tasks','rewards','leaderboard','store','drills','settings'].forEach(n=>SEC[n]=crud(n));
+H.new=b=>openForm(b.dataset.n);
+H.edit=b=>{const c=CF[b.dataset.n];openForm(b.dataset.n,c.rows.find(r=>String(r[c.pk])===b.dataset.id))};
+H.del=b=>{const c=CF[b.dataset.n];if(confirm('Delete this '+c.one+'? This cannot be undone.'))act(()=>A('crud',{table:c.t,op:'delete',id:b.dataset.id}),'Deleted')};
+
+H.scores=async b=>{try{
+  const d=await A('read',{table:'leaderboard_scores',select:'*,players(username,first_name)',eq:{season_id:b.dataset.id},order:'score',limit:50});
+  modal('<h3 style="margin-top:0">Season scores (top 50)</h3>'+table([['@p','Player'],['score','Score'],['yellow','💛'],['rounds','Rounds']],d.rows)+'<div class="bar"><button data-a="close">Close</button></div>');
+}catch(e){toast(e.message)}};
+
+SEC.token=async v=>{
+  const [t,h]=await Promise.all([A('read',{table:'token_config',eq:{id:1}}),A('read',{table:'token_rate_history',order:'id',limit:10})]),c=t.rows[0]||{};CF.token.row=c;
+  v.innerHTML='<div class="cards">'+card(c.yellow_per_pxn,'💛 per 1 '+esc(c.symbol))+card((c.swap_fee_bps/100)+'%','Swap fee')+card(c.min_swap_yellow,'Minimum swap (💛)')+card(c.swap_enabled?'On':'Off','Swap')+'</div>'+
+   '<div class="bar" style="margin-top:14px"><input id="rt" type="number" step="any" value="'+esc(c.yellow_per_pxn)+'"><button class="pri" data-a="rate">Set new rate (owner)</button><button data-a="tokedit">Edit token settings</button></div>'+
+   '<h3>Rate history</h3>'+table([['created_at','When'],['yellow_per_pxn','Rate'],['changed_by','By']],h.rows);
+};
+H.rate=()=>{const r=Number($('#rt').value);if(!(r>0))return toast('Enter a rate above 0');
+  if(confirm('Change rate to '+r+' 💛 per PXN? New swaps use it immediately.'))act(()=>A('set_rate',{yellow_per_pxn:r}),'Rate updated')};
+H.tokedit=()=>openForm('token',CF.token.row);
+
+SEC.market=async v=>{
+  const s=ST.market,d=await A('read',{table:'marketplace_listings',eq:s.f==='all'?{}:{status:s.f},order:'created_at',limit:PER,offset:s.p*PER});
+  v.innerHTML=tabs(['active','sold','cancelled','all'],s.f)+table([['created_at','Listed'],['seller_id','Seller'],['player_drill_id','Drill'],['price','Price'],['price_currency','Currency'],['fee','Fee'],['buyer_id','Buyer'],['status','Status'],['sold_at','Sold']],d.rows)+pager(s,d.total);
+};
+
+SEC.audit=async v=>{
+  const s=ST.audit,d=await A('read',{table:'audit_log',order:'id',limit:PER,offset:s.p*PER});s.rows=d.rows;
+  v.innerHTML=table([['created_at','When'],['actor_type','Actor'],['actor_id','Admin ID'],['action','Action'],['entity','Entity'],['entity_id','Entity ID']],d.rows,r=>'<button data-a="audit" data-id="'+r.id+'">Details</button>')+pager(s,d.total);
+};
+H.audit=b=>{const r=ST.audit.rows.find(x=>String(x.id)===b.dataset.id);
+  modal('<h3 style="margin-top:0">'+esc(r.action)+'</h3><p class="mut">'+dt(r.created_at)+' · '+esc(r.entity)+' '+esc(r.entity_id)+(r.ip?' · '+esc(r.ip):'')+'</p><h4>Before</h4><pre>'+esc(JSON.stringify(r.before,null,2))+'</pre><h4>After</h4><pre>'+esc(JSON.stringify(r.after,null,2))+'</pre><div class="bar"><button data-a="close">Close</button></div>')};
+
+// ---------- boot ----------
+if(PROJECT_ID==='YOUR_PROJECT_ID'||ANON_KEY==='YOUR_ANON_KEY')$('#le').textContent='Set PROJECT_ID and ANON_KEY inside admin.html first.';
+else if(S)enter().catch(()=>signOut());
+</script></body></html>
