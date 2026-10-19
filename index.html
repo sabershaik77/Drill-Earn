@@ -272,8 +272,8 @@ function loop(t){
         if(it.t=='stone'){P.hp-=10;P.shake=.3;burst(it.x,it.y,'#d9622b',14);pop(it.x,it.y,'-10 HP','#ff6a5a')}
         else if(it.t=='cash'){P.cash+=1;burst(it.x,it.y,'#7dd35a',10);pop(it.x,it.y,'+1','#f6c98f')}
         else if(it.t=='score'){P.score+=5;burst(it.x,it.y,'#fff',10);pop(it.x,it.y,'+5','#fff')}
-        else if(it.t=='sky'){P.sky++;P.score+=30;burst(it.x,it.y,'#5fd4ff',12);pop(it.x,it.y,'+30','#7fe3ff')}
-        else{P.pxn++;P.score+=100;burst(it.x,it.y,'#ffe14a',20);pop(it.x,it.y,'+100','#ffe14a')}
+        else if(it.t=='sky'){P.sky+=1;burst(it.x,it.y,'#5fd4ff',12);pop(it.x,it.y,'+1','#7fe3ff')}
+        else{P.pxn+=1;burst(it.x,it.y,'#ffe14a',20);pop(it.x,it.y,'+1','#ffe14a')}
         upd();
         if(P.hp<=0){st=0;sub();break}   // stop at death: no pickups after the last stone
       }}
