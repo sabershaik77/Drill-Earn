@@ -88,8 +88,16 @@ async function enter(){
 const dt=v=>v?new Date(v).toLocaleString([],{dateStyle:'short',timeStyle:'short'}):'–';
 const fmtN=v=>v==null?'–':isNaN(v)?v:Number(v).toLocaleString(undefined,{maximumFractionDigits:6});
 const get=(r,k)=>{if(k==='@p'){const p=r.players||{};return p.username?'@'+p.username:p.first_name||'?'}return k.split('.').reduce((o,p)=>o==null?o:o[p],r)};
+function tonFriendly(raw,bounce){
+  const m=/^(-?\d+):([0-9a-fA-F]{64})$/.exec(String(raw||'').trim());if(!m)return String(raw||'').trim();
+  const b=new Uint8Array(36);b[0]=bounce?0x11:0x51;b[1]=parseInt(m[1],10)&255;
+  for(let i=0;i<32;i++)b[2+i]=parseInt(m[2].substr(i*2,2),16);
+  let c=0;for(let i=0;i<34;i++){c^=b[i]<<8;for(let j=0;j<8;j++)c=(c&0x8000)?(((c<<1)^0x1021)&0xffff):((c<<1)&0xffff)}
+  b[34]=c>>8;b[35]=c&255;let s='';for(const x of b)s+=String.fromCharCode(x);
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_')}
 function fmt(k,v){
   if(v==null)return '–';
+  if(/address|wallet/.test(k)&&typeof v==='string')return '<span style="word-break:break-all">'+esc(tonFriendly(v))+'</span>';
   if(typeof v==='boolean')return v?'✓':'–';
   if(typeof v==='object'){const s=JSON.stringify(v);return esc(s.length>70?s.slice(0,70)+'…':s)}
   if(/_at$/.test(k))return dt(v);
@@ -146,7 +154,7 @@ H.pview=async b=>{try{
   const d=await A('player',{id:b.dataset.id}),p=d.player,w=[].concat(p.player_wallets||[])[0]||{},dv=[].concat(p.player_devices||[]);
   modal('<h3 style="margin-top:0">'+esc(p.username?'@'+p.username:p.first_name)+' <span class="tag s-'+p.status+'">'+p.status+'</span></h3>'+
     '<div class="cards">'+card(p.trust_score,'Trust')+card(p.energy,'Energy')+card(w.pxn,'PXN')+card(w.cash,'💵 Cash')+card(w.blue,'💠 Blue')+'</div>'+
-    '<p class="mut">Telegram ID '+p.tg_id+' · joined '+dt(p.created_at)+' · '+dv.length+' device(s)'+(p.ton_wallet?' · wallet '+esc(p.ton_wallet):'')+'</p>'+
+    '<p class="mut">Telegram ID '+p.tg_id+' · joined '+dt(p.created_at)+' · '+dv.length+' device(s)'+(p.ton_wallet?' · wallet '+esc(tonFriendly(p.ton_wallet)):'')+'</p>'+
     '<div class="bar">'+(p.status==='banned'?'<button class="pri" data-a="ban" data-b="0" data-id="'+p.id+'">Unban</button>':'<button class="dg" data-a="ban" data-b="1" data-id="'+p.id+'">Ban player</button>')+'<button data-a="close">Close</button></div>'+
     '<h4>Flags</h4>'+table([['created_at','When'],['rule','Rule'],['severity','Sev'],['status','Status']],d.flags)+
     '<h4>Recent rounds</h4>'+table([['started_at','Started'],['status','Status'],['duration_ms','ms'],['score','Score'],['yellow','💛']],d.rounds.slice(0,10))+

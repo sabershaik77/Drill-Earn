@@ -115,6 +115,13 @@ $('adb').onclick=async()=>{
   toast('Energy will arrive in a moment');
 };
 
+function tonFriendly(raw,bounce){
+  const m=/^(-?\d+):([0-9a-fA-F]{64})$/.exec(String(raw||'').trim());if(!m)return String(raw||'').trim();
+  const b=new Uint8Array(36);b[0]=bounce?0x11:0x51;b[1]=parseInt(m[1],10)&255;
+  for(let i=0;i<32;i++)b[2+i]=parseInt(m[2].substr(i*2,2),16);
+  let c=0;for(let i=0;i<34;i++){c^=b[i]<<8;for(let j=0;j<8;j++)c=(c&0x8000)?(((c<<1)^0x1021)&0xffff):((c<<1)&0xffff)}
+  b[34]=c>>8;b[35]=c&255;let s='';for(const x of b)s+=String.fromCharCode(x);
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_')}
 const TC_MANIFEST='https://sabershaik77.github.io/Drill-Earn/tonconnect-manifest.json'; // <-- apna URL
 let _tc=null;
 function tcInit(){
@@ -133,7 +140,7 @@ $('wd').onclick=()=>{
     '<button class="big" id="tc-btn">🔗 Connect TON Wallet</button>'+
     '<div id="tc-addr" style="font-size:12px;opacity:.7;text-align:center;margin:-4px 0 8px"></div>'+
     '<p style="text-align:center;opacity:.6;font-size:12px;margin:2px 0">— or paste address —</p>'+
-    '<input id="wt" placeholder="TON address (EQ… / UQ…)" value="'+esc(saved)+'">'+
+    '<input id="wt" placeholder="TON address (EQ… / UQ…)" value="'+esc(tonFriendly(saved))+'">'+
     '<button class="big" id="wg">Request withdrawal</button>'+
     '<div class="list">'+L+'</div>'
   );
@@ -144,7 +151,7 @@ $('wd').onclick=()=>{
     if(!tc)return toast('Wallet connect not available');
     try{
       if(!tc.connected){await tc.openModal()}
-      const addr=tc.account&&tc.account.address;
+      const addr=tc.account&&tonFriendly(tc.account.address);
       if(addr){
         $('wt').value=addr;
         $('tc-addr').textContent='✓ Connected: '+addr.slice(0,6)+'…'+addr.slice(-4);
@@ -157,14 +164,14 @@ $('wd').onclick=()=>{
   try{
     const tc=tcInit();
     if(tc&&tc.connected&&tc.account&&tc.account.address){
-      $('wt').value=tc.account.address;
-      $('tc-addr').textContent='✓ Connected: '+tc.account.address.slice(0,6)+'…'+tc.account.address.slice(-4);
+      const fa=tonFriendly(tc.account.address);$('wt').value=fa;
+      $('tc-addr').textContent='✓ Connected: '+fa.slice(0,6)+'…'+fa.slice(-4);
       $('tc-btn').textContent='✓ Wallet connected';
     }
   }catch(e){}
 
   $('wg').onclick=async()=>{
-    const a=+$('wa').value,ad=$('wt').value.trim();
+    const a=+$('wa').value,ad=tonFriendly($('wt').value.trim());
     if(!(a>0))return toast('Enter amount');
     if(!/^(EQ|UQ)[A-Za-z0-9_-]{46}$/.test(ad))return toast('Enter a valid TON address');
     try{await api('withdraw',{pxn:a,address:ad});await refresh();toast('Request sent');$('panel').style.display='none'}
