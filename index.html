@@ -274,7 +274,7 @@ const SFX={
   stone(t){noise(t,.25,.45,300,.7);tone(140,t,.25,'sawtooth',.16,45)},           // thud
   over(t){[392,330,262,196].forEach((f,i)=>tone(f,t+i*.14,.3,'triangle',.14))}   // game over
 };
-function snd(n){if(!SND)return;if(!ac())return;try{SFX[n](AC.currentTime)}catch(e){}}
+function snd(n){try{if(!SND)return;if(!ac())return;SFX[n](AC.currentTime)}catch(e){}}
 const BASS=[55,65.41,49,82.41],PAT=[0,2,4,2,1,3,5,3,0,2,4,7,5,3,2,1],SC=[0,3,5,7,10];
 const nf=i=>110*Math.pow(2,(SC[i%5]+12*Math.floor(i/5))/12);
 function musicTick(){if(!musicOn||!AC)return;
@@ -282,9 +282,9 @@ function musicTick(){if(!musicOn||!AC)return;
     tone(nf(PAT[mstep%16]+5),nextT,.38,'triangle',.4,0,mg);
     if(mstep%8===0)tone(BASS[(mstep>>3)%4],nextT,2,'sine',.6,0,mg);
     nextT+=.28;mstep++}}
-function syncMusic(){
+function syncMusic(){try{
   if(SND&&playing&&ac()){if(!musicOn){musicOn=true;nextT=AC.currentTime+.1;musicTimer=setInterval(musicTick,100)}}
-  else{musicOn=false;clearInterval(musicTimer)}}
+  else{musicOn=false;clearInterval(musicTimer)}}catch(e){}}
 document.addEventListener('pointerdown',e=>{if(e.target.closest&&e.target.closest('button'))snd('click')},true);
 document.addEventListener('visibilitychange',()=>{if(!AC)return;if(document.hidden)AC.suspend();else if(SND)AC.resume()});
 function openSet(on){document.getElementById('settings').style.display=on?'flex':'none';if(on)sndLabel()}
