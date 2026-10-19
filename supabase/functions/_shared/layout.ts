@@ -65,8 +65,8 @@ export function verifyRound(seed: number, events: unknown, durationMs: number): 
     if (it.t === "stone") hp -= STONE_DMG;
     else if (it.t === "cash") cash += 1;
     else if (it.t === "score") score += 5;
-    else if (it.t === "sky") blue += 1;
-    else pxn += 1;
+    else if (it.t === "sky") { blue += 1; score += 30; }
+    else { pxn += 1; score += 100; }
   }
 
   if (hp > 0) return bad("round_not_finished");
