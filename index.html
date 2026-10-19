@@ -2,6 +2,7 @@
 <html lang="en"><head><meta charset="utf-8"><title>Drill & Earn</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://unpkg.com/@tonconnect/ui@latest/dist/tonconnect-ui.min.js"></script>
 <script async src="https://sad.adsgram.ai/js/sad.min.js"></script>
 <style>
 :root{--bg:#000;--fg:#f2e6d0;--soil:#2a2218;--soil2:#3a2f22;--gold:#ffd21a;--grn:#6cc04a}
@@ -110,12 +111,60 @@ $('adb').onclick=async()=>{
   toast('Energy will arrive in a moment');
 };
 
+const TC_MANIFEST='https://yourdomain.com/tonconnect-manifest.json'; // <-- apna URL
+let _tc=null;
+function tcInit(){
+  if(!window.TON_CONNECT_UI)return null;
+  if(!_tc)_tc=new TON_CONNECT_UI.TonConnectUI({manifestUrl:TC_MANIFEST});
+  return _tc;
+}
 $('wd').onclick=()=>{
-  const t=me.token,w=me.wallet,L=(me.withdrawals||[]).map(x=>'<div><span>'+(+x.pxn_amount)+' '+esc(t.symbol)+'</span><span>'+esc(x.status)+(x.reject_reason?' · '+esc(x.reject_reason):'')+'</span></div>').join('');
-  panel('<h3>Withdraw '+esc(t.symbol)+'</h3><p>Balance: '+(+w.pxn).toFixed(4)+' '+esc(t.symbol)+'. Requests are reviewed by hand.</p><input id="wa" type="number" inputmode="decimal" placeholder="Amount"><input id="wt" placeholder="Your TON wallet address (EQ… / UQ…)"><button class="big" id="wg">Request withdrawal</button><div class="list">'+L+'</div>');
+  const t=me.token,w=me.wallet;
+  const L=(me.withdrawals||[]).map(x=>'<div><span>'+(+x.pxn_amount)+' '+esc(t.symbol)+'</span><span>'+esc(x.status)+(x.reject_reason?' · '+esc(x.reject_reason):'')+'</span></div>').join('');
+  const saved=me.player&&me.player.ton_wallet||'';
+  panel(
+    '<h3>Withdraw '+esc(t.symbol)+'</h3>'+
+    '<p>Balance: '+(+w.pxn).toFixed(4)+' '+esc(t.symbol)+'. Requests are reviewed by hand.</p>'+
+    '<input id="wa" type="number" inputmode="decimal" placeholder="Amount">'+
+    '<button class="big" id="tc-btn">🔗 Connect TON Wallet</button>'+
+    '<div id="tc-addr" style="font-size:12px;opacity:.7;text-align:center;margin:-4px 0 8px"></div>'+
+    '<p style="text-align:center;opacity:.6;font-size:12px;margin:2px 0">— or paste address —</p>'+
+    '<input id="wt" placeholder="TON address (EQ… / UQ…)" value="'+esc(saved)+'">'+
+    '<button class="big" id="wg">Request withdrawal</button>'+
+    '<div class="list">'+L+'</div>'
+  );
+
+  // TON Connect button
+  $('tc-btn').onclick=async()=>{
+    const tc=tcInit();
+    if(!tc)return toast('Wallet connect not available');
+    try{
+      if(!tc.connected){await tc.openModal()}
+      const addr=tc.account&&tc.account.address;
+      if(addr){
+        $('wt').value=addr;
+        $('tc-addr').textContent='✓ Connected: '+addr.slice(0,6)+'…'+addr.slice(-4);
+        $('tc-btn').textContent='✓ Wallet connected';
+      } else { toast('No address from wallet') }
+    }catch(e){toast('Connect failed')}
+  };
+
+  // auto-update if wallet already connected
+  try{
+    const tc=tcInit();
+    if(tc&&tc.connected&&tc.account&&tc.account.address){
+      $('wt').value=tc.account.address;
+      $('tc-addr').textContent='✓ Connected: '+tc.account.address.slice(0,6)+'…'+tc.account.address.slice(-4);
+      $('tc-btn').textContent='✓ Wallet connected';
+    }
+  }catch(e){}
+
   $('wg').onclick=async()=>{
-    const a=+$('wa').value,ad=$('wt').value.trim();if(!(a>0)||!ad)return toast('Enter amount and address');
-    try{await api('withdraw',{pxn:a,address:ad});await refresh();toast('Request sent');$('panel').style.display='none'}catch(e){toast(msg(e))}
+    const a=+$('wa').value,ad=$('wt').value.trim();
+    if(!(a>0))return toast('Enter amount');
+    if(!/^(EQ|UQ)[A-Za-z0-9_-]{46}$/.test(ad))return toast('Enter a valid TON address');
+    try{await api('withdraw',{pxn:a,address:ad});await refresh();toast('Request sent');$('panel').style.display='none'}
+    catch(e){toast(msg(e))}
   };
 };
 $('lb').onclick=async()=>{
