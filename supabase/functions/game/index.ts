@@ -29,14 +29,14 @@ Deno.serve(async (req) => {
 
     switch (body.action) {
       case "me": {
-        const [energy, wallet, token, wd] = await Promise.all([
-          rpc("get_energy", { p_player: pid }),
-          sb.from("player_wallets").select("yellow,cash,blue,pxn").eq("player_id", pid).single(),
-          sb.from("token_config").select("symbol,yellow_per_pxn,swap_fee_bps,min_swap_yellow,swap_enabled").eq("id", 1).single(),
-          sb.from("withdrawals").select("id,pxn_amount,status,reject_reason,tx_hash,created_at")
-            .eq("player_id", pid).order("created_at", { ascending: false }).limit(10),
-        ]);
-        return json({ energy, wallet: wallet.data, token: token.data, withdrawals: wd.data });
+const [energy, token, wd, pl] = await Promise.all([
+  rpc("get_energy", { p_player: pid }),
+  sb.from("token_config").select("symbol,jetton_master,decimals").eq("id", 1).single(),
+  sb.from("withdrawals").select("id,pxn_amount,status,reject_reason,tx_hash,created_at")
+    .eq("player_id", pid).order("created_at", { ascending: false }).limit(10),
+  sb.from("players").select("ton_wallet").eq("id", pid).single(),
+]);
+return json({ energy, wallet, token: token.data, withdrawals: wd.data, player: pl.data });
       }
 
       case "start_round": {
