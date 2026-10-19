@@ -31,7 +31,7 @@ input{font:inherit;padding:10px;background:#15110b;border:2px solid #5a4a36;colo
 #toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 56px);transform:translateX(-50%);background:var(--gold);color:#201800;padding:8px 14px;font-size:14px;display:none;z-index:9;max-width:90%;text-align:center}
 </style></head><body>
 <canvas id="c"></canvas>
-<div id="hud"><div id="hp"><div id="hpf"></div></div><span id="sc">Score 0</span><span id="cs">💵0</span><span id="sk">💠0</span><span id="gd">💛0</span></div>
+<div id="hud"><div id="hp"><div id="hpf"></div></div><span id="sc">Score 0</span><span id="cs">💵0</span><span id="sk">💠0</span><span id="gd">PXN 0</span></div>
 <div id="base"><div id="knob"></div></div>
 
 <div id="load" class="ov" style="display:flex"><div id="lt">Loading…</div></div>
@@ -39,10 +39,10 @@ input{font:inherit;padding:10px;background:#15110b;border:2px solid #5a4a36;colo
 <div id="menu" class="ov"><div class="card">
   <h2>⛏ Drill & Earn</h2>
   <div class="row"><b id="en">⚡ 0/24</b><small id="nx"></small></div>
-  <div class="bal"><span id="by">💛 0</span><span id="bp">PXN 0</span><span id="bc">💵 0</span><span id="bb">💠 0</span></div>
+  <div class="bal"><span id="by">PXN 0</span><span id="bc">💵 0</span><span id="bb">💠 0</span></div>
   <button class="big" id="pl">▶ Play (1 ⚡)</button>
   <button id="adb">📺 Watch ad (+1 ⚡)</button>
-  <div class="grid"><button id="sw">🔄 Swap</button><button id="wd">💸 Withdraw</button><button id="lb">🏆 Top 50</button></div>
+  <div class="grid" style="grid-template-columns:1fr 1fr"><button id="wd">💸 Withdraw</button><button id="lb">🏆 Top 50</button></div>
 </div></div>
 
 <div id="panel" class="ov"><div class="card" id="pc"></div></div>
@@ -82,8 +82,7 @@ function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';cle
 function renderMenu(){
   const e=me.energy,w=me.wallet;
   $('en').textContent='⚡ '+e.energy+'/'+e.cap;
-  $('by').textContent='💛 '+w.yellow;$('bc').textContent='💵 '+w.cash;$('bb').textContent='💠 '+w.blue;
-  $('bp').textContent=me.token.symbol+' '+(+w.pxn).toFixed(4);
+  $('by').textContent='PXN '+(+w.pxn).toFixed(4);$('bc').textContent='💵 '+w.cash;$('bb').textContent='💠 '+w.blue;
   $('adb').textContent='📺 Watch ad (+1 ⚡) · '+e.ads_left+' left';$('adb').disabled=e.ads_left<=0;
   nextAt=e.next_in_seconds!=null?Date.now()+e.next_in_seconds*1000:0;
 }
@@ -110,15 +109,7 @@ $('adb').onclick=async()=>{
   for(let i=0;i<6;i++){await sleep(1500);await refresh().catch(()=>{});if(me.energy.energy>before)return toast('+1 ⚡')}
   toast('Energy will arrive in a moment');
 };
-$('sw').onclick=()=>{
-  const t=me.token,w=me.wallet,fee=t.swap_fee_bps/10000;
-  panel('<h3>Swap 💛 to '+esc(t.symbol)+'</h3><p>'+t.yellow_per_pxn+' 💛 = 1 '+esc(t.symbol)+(fee?' · fee '+(fee*100)+'%':'')+'</p><p>You have 💛 '+w.yellow+' · minimum '+t.min_swap_yellow+'</p><input id="sa" type="number" inputmode="numeric" placeholder="Amount of 💛"><p id="sp"></p><button class="big" id="sg">Swap</button>');
-  $('sa').oninput=()=>{const v=+$('sa').value||0;$('sp').textContent='You get ≈ '+(v/t.yellow_per_pxn*(1-fee)).toFixed(4)+' '+t.symbol};
-  $('sg').onclick=async()=>{
-    const v=Math.floor(+$('sa').value);if(!(v>0))return toast('Enter an amount');
-    try{const r=await api('swap',{yellow:v});await refresh();toast('Swapped · +'+r.pxn+' '+t.symbol);$('panel').style.display='none'}catch(e){toast(msg(e))}
-  };
-};
+
 $('wd').onclick=()=>{
   const t=me.token,w=me.wallet,L=(me.withdrawals||[]).map(x=>'<div><span>'+(+x.pxn_amount)+' '+esc(t.symbol)+'</span><span>'+esc(x.status)+(x.reject_reason?' · '+esc(x.reject_reason):'')+'</span></div>').join('');
   panel('<h3>Withdraw '+esc(t.symbol)+'</h3><p>Balance: '+(+w.pxn).toFixed(4)+' '+esc(t.symbol)+'. Requests are reviewed by hand.</p><input id="wa" type="number" inputmode="decimal" placeholder="Amount"><input id="wt" placeholder="Your TON wallet address (EQ… / UQ…)"><button class="big" id="wg">Request withdrawal</button><div class="list">'+L+'</div>');
@@ -143,7 +134,7 @@ function genLayout(seed){
   for(let n=0;n<N_ITEMS;n++){
     const x=40+r()*(WS-80),y=40+r()*(WS-80),q=r(),rot=r()*6;
     if(Math.hypot(x-start.x,y-start.y)<90)continue;
-    items.push({i:n,x,y,rot,t:q<.02?'gold':q<.12?'score':q<.32?'cash':q<.52?'sky':'stone'});
+    items.push({i:n,x,y,rot,t:q<.02?'pxn':q<.12?'score':q<.32?'cash':q<.52?'sky':'stone'});
   }
   return{start,items};
 }
@@ -155,7 +146,7 @@ let vw,vh;function rs(){vw=C.width=innerWidth;vh=C.height=innerHeight}rs();onres
 let SEED=0;
 const h=(a,b)=>{let n=Math.sin(a*127.1+b*311.7+7+SEED)*43758.5;return n-Math.floor(n)};
 const tones=['#7a6f66','#8a7e74','#6b6159','#948579'];
-let dug,items=[],P={x:0,y:0,a:0,roll:0,hp:100,score:0,cash:0,sky:0,gold:0,shake:0},fx=[],txt=[],st=0,ev=[],gt=0;
+let dug,items=[],P={x:0,y:0,a:0,roll:0,hp:100,score:0,cash:0,sky:0,pxn:0,shake:0},fx=[],txt=[],st=0,ev=[],gt=0;
 const rnd=Math.random;
 function begin(seed){
   dug=new Uint8Array(W*W);SEED=seed%1000;
@@ -165,7 +156,7 @@ function begin(seed){
     wx.fillRect(i,j,1,1);
   }
   const L=genLayout(seed);
-  P={x:L.start.x,y:L.start.y,a:L.start.a,roll:0,hp:100,score:0,cash:0,sky:0,gold:0,shake:0};
+  P={x:L.start.x,y:L.start.y,a:L.start.a,roll:0,hp:100,score:0,cash:0,sky:0,pxn:0,shake:0};
   items=L.items;fx=[];txt=[];ev=[];gt=0;
   dig();upd();
   document.body.className='play';$('menu').style.display='none';$('over').style.display='none';st=1;
@@ -182,7 +173,7 @@ function dig(){
 }
 function upd(){
   $('hpf').style.width=Math.max(0,P.hp)+'%';
-  $('sc').textContent='Score '+P.score;$('cs').textContent='💵'+P.cash;$('sk').textContent='💠'+P.sky;$('gd').textContent='💛'+P.gold;
+  $('sc').textContent='Score '+P.score;$('cs').textContent='💵'+P.cash;$('sk').textContent='💠'+P.sky;$('gd').textContent='PXN '+P.pxn;
 }
 function pop(x,y,s,c){txt.push({x,y,s,c,l:1})}
 function burst(x,y,c,n){for(let i=0;i<n;i++)fx.push({x,y,vx:(rnd()-.5)*200,vy:(rnd()-.5)*200,l:.6,c})}
@@ -190,7 +181,7 @@ async function sub(){
   $('rb').style.display='none';$('fin').textContent='Checking your round…';$('over').style.display='flex';
   try{
     const r=await api('finish_round',{round_id:R.round_id,duration_ms:Math.round(gt),events:ev});
-    $('fin').textContent=r.ok?'Score '+r.score+' | 💵'+r.cash+' | 💠'+r.blue+' | 💛'+r.yellow:'This round could not be verified. No reward was given.';
+    $('fin').textContent=r.ok?'Score '+r.score+' | 💵'+r.cash+' | 💠'+r.blue+' | PXN '+r.pxn:'This round could not be verified. No reward was given.';
   }catch(e){$('fin').textContent=msg(e);$('rb').style.display='block'}
 }
 $('rb').onclick=sub;
@@ -223,7 +214,7 @@ function loop(t){
         else if(it.t=='cash'){P.cash+=1;burst(it.x,it.y,'#7dd35a',10);pop(it.x,it.y,'+1','#f6c98f')}
         else if(it.t=='score'){P.score+=5;burst(it.x,it.y,'#fff',10);pop(it.x,it.y,'+5','#fff')}
         else if(it.t=='sky'){P.sky++;P.score+=30;burst(it.x,it.y,'#5fd4ff',12);pop(it.x,it.y,'+30','#7fe3ff')}
-        else{P.gold++;P.score+=100;burst(it.x,it.y,'#ffe14a',20);pop(it.x,it.y,'+100','#ffe14a')}
+        else{P.pxn++;P.score+=100;burst(it.x,it.y,'#ffe14a',20);pop(it.x,it.y,'+100','#ffe14a')}
         upd();
         if(P.hp<=0){st=0;sub();break}   // stop at death: no pickups after the last stone
       }}
@@ -248,7 +239,7 @@ function draw(t){
     else if(it.t=='cash'){X.fillStyle='#4aa83a';X.fillRect(x-12,y-7,24,14);X.fillStyle='#bff0a0';X.fillRect(x-3,y-3,6,6)}
     else if(it.t=='score'){X.fillStyle='#fff';X.fillRect(x-3,y-9,6,18);X.fillRect(x-9,y-3,18,6)}
     else if(it.t=='sky')diamond(x,y,14,'#4fc8ff','#e6fbff');
-    else{const p=1+Math.sin(t*6)*.2;X.shadowColor='#ffe14a';X.shadowBlur=14;diamond(x,y,12*p,'#ffd21a','#fff7b0');X.shadowBlur=0}
+    else{const p=1+Math.sin(t*5)*.08,r=15*p;X.imageSmoothingEnabled=true;if(PXN.complete)X.drawImage(PXN,x-r,y-r,r*2,r*2);X.imageSmoothingEnabled=false}
   }
   for(const f of fx){X.fillStyle=f.c;X.fillRect(f.x,f.y,4,4)}
   X.save();X.translate(P.x,P.y);

@@ -131,7 +131,7 @@ H.tab=b=>{ST[cur].f=b.dataset.v;ST[cur].p=0;load()};
 // ---------- sections ----------
 const SEC={};
 SEC.dashboard=async v=>{
-  const d=await A('dashboard'),L={total_players:'Players',dau:'Active (24h)',rounds_24h:'Rounds (24h)',yellow_minted_24h:'💛 earned (24h)',yellow_in_circulation:'💛 in wallets',pending_withdrawals:'Pending withdrawals',pending_pxn:'Pending PXN',open_flags:'Open flags',banned_players:'Banned players'};
+  const d=await A('dashboard'),L={total_players:'Players',dau:'Active (24h)',rounds_24h:'Rounds (24h)',pxn_minted_24h:'PXN earned (24h)',pxn_in_circulation:'PXN in wallets',pending_withdrawals:'Pending withdrawals',pending_pxn:'Pending PXN',open_flags:'Open flags',banned_players:'Banned players'};
   v.innerHTML='<div class="cards">'+Object.keys(L).map(k=>card(d[k],L[k])).join('')+'</div><div class="bar" style="margin-top:14px"><button data-a="reload">Refresh</button></div>';
 };
 H.reload=load;
@@ -145,7 +145,7 @@ H.psearch=()=>{ST.players.q=$('#q').value.trim();ST.players.p=0;load()};
 H.pview=async b=>{try{
   const d=await A('player',{id:b.dataset.id}),p=d.player,w=[].concat(p.player_wallets||[])[0]||{},dv=[].concat(p.player_devices||[]);
   modal('<h3 style="margin-top:0">'+esc(p.username?'@'+p.username:p.first_name)+' <span class="tag s-'+p.status+'">'+p.status+'</span></h3>'+
-    '<div class="cards">'+card(p.trust_score,'Trust')+card(p.energy,'Energy')+card(w.yellow,'💛 Yellow')+card(w.pxn,'PXN')+card(w.cash,'💵 Cash')+card(w.blue,'💠 Blue')+'</div>'+
+    '<div class="cards">'+card(p.trust_score,'Trust')+card(p.energy,'Energy')+card(w.pxn,'PXN')+card(w.cash,'💵 Cash')+card(w.blue,'💠 Blue')+'</div>'+
     '<p class="mut">Telegram ID '+p.tg_id+' · joined '+dt(p.created_at)+' · '+dv.length+' device(s)'+(p.ton_wallet?' · wallet '+esc(p.ton_wallet):'')+'</p>'+
     '<div class="bar">'+(p.status==='banned'?'<button class="pri" data-a="ban" data-b="0" data-id="'+p.id+'">Unban</button>':'<button class="dg" data-a="ban" data-b="1" data-id="'+p.id+'">Ban player</button>')+'<button data-a="close">Close</button></div>'+
     '<h4>Flags</h4>'+table([['created_at','When'],['rule','Rule'],['severity','Sev'],['status','Status']],d.flags)+
@@ -178,7 +178,7 @@ SEC.anticheat=async v=>{
 H.flag=b=>act(()=>A('resolve_flag',{id:b.dataset.id,status:b.dataset.op}),'Updated');
 
 // ---- generic editor for catalog tables ----
-const CUR=['yellow','cash','blue','pxn'];
+const CUR=['pxn','cash','blue'];
 const T=(k,l,r)=>({k,l,t:'t',r}),N=(k,l,r,d)=>({k,l,t:'n',r,d}),B=(k,l,d)=>({k,l,t:'b',d:d!==false}),Sel=(k,l,o)=>({k,l,t:'s',o}),J=(k,l,d,r)=>({k,l,t:'j',d,r}),D=(k,l,r)=>({k,l,t:'d',r});
 const NOTE='Saved live to the database. Players can use this in the game once the matching game feature is added.';
 const CF={
@@ -192,11 +192,11 @@ const CF={
  store:{t:'store_items',one:'item',pk:'id',note:NOTE,cols:[['id','ID'],['sku','SKU'],['name','Name'],['item_type','Type'],['price_currency','Currency'],['price_amount','Price'],['stock','Stock'],['is_active','Active']],
   f:[T('sku','SKU (unique)',1),T('name','Name',1),Sel('item_type','Type',['drill','energy_pack','boost']),Sel('price_currency','Price currency',CUR),N('price_amount','Price',1,0),J('payload','Payload (JSON, e.g. {"drill_id":1})','{}'),N('stock','Stock (empty = unlimited)'),B('is_active','Active'),D('starts_at','Starts'),D('ends_at','Ends')]},
  drills:{t:'drills',one:'drill',pk:'id',note:NOTE,cols:[['id','ID'],['name','Name'],['rarity','Rarity'],['speed_mult','Speed x'],['hp_bonus','HP +'],['tradable','Tradable'],['is_active','Active']],
-  f:[T('name','Name',1),T('description','Description'),Sel('rarity','Rarity',['common','rare','epic','legendary']),N('speed_mult','Speed multiplier',1,1),N('hp_bonus','HP bonus',1,0),N('yellow_cap_bonus','Yellow cap bonus',1,0),N('max_level','Max level',1,1),T('image_url','Image URL'),B('tradable','Tradable'),B('is_active','Active')]},
+  f:[T('name','Name',1),T('description','Description'),Sel('rarity','Rarity',['common','rare','epic','legendary']),N('speed_mult','Speed multiplier',1,1),N('hp_bonus','HP bonus',1,0),(delete this line entirely — replace with nothing)N('max_level','Max level',1,1),T('image_url','Image URL'),B('tradable','Tradable'),B('is_active','Active')]},
  settings:{t:'app_settings',one:'setting',pk:'key',nodel:1,note:'Owner only. These limits are used by the game server immediately.',cols:[['key','Key'],['value','Value'],['description','Description'],['updated_at','Updated']],
   f:[T('key','Key',1),J('value','Value (JSON: number, true/false or "text")','',1),T('description','Description')]},
  token:{t:'token_config',one:'token settings',pk:'id',
-  f:[T('symbol','Symbol',1),T('network','Network',1),T('jetton_master','Jetton master address'),N('decimals','Decimals',1,9),N('swap_fee_bps','Swap fee (basis points, 100 = 1%)',1,0),N('min_swap_yellow','Minimum swap (💛)',1,1000),B('swap_enabled','Swap enabled')]}
+  f:[T('symbol','Symbol',1),T('network','Network',1),T('jetton_master','Jetton master address'),N('decimals','Decimals',1,9)]}
 };
 const loc=v=>{const d=new Date(v);return new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,16)};
 function openForm(n,row){
@@ -236,17 +236,15 @@ H.del=b=>{const c=CF[b.dataset.n];if(confirm('Delete this '+c.one+'? This cannot
 
 H.scores=async b=>{try{
   const d=await A('read',{table:'leaderboard_scores',select:'*,players(username,first_name)',eq:{season_id:b.dataset.id},order:'score',limit:50});
-  modal('<h3 style="margin-top:0">Season scores (top 50)</h3>'+table([['@p','Player'],['score','Score'],['yellow','💛'],['rounds','Rounds']],d.rows)+'<div class="bar"><button data-a="close">Close</button></div>');
+  modal('<h3 style="margin-top:0">Season scores (top 50)</h3>'+table([['@p','Player'],['score','Score'],['pxn','PXN'],['rounds','Rounds']],d.rows)+'<div class="bar"><button data-a="close">Close</button></div>');
 }catch(e){toast(e.message)}};
 
 SEC.token=async v=>{
-  const [t,h]=await Promise.all([A('read',{table:'token_config',eq:{id:1}}),A('read',{table:'token_rate_history',order:'id',limit:10})]),c=t.rows[0]||{};CF.token.row=c;
-  v.innerHTML='<div class="cards">'+card(c.yellow_per_pxn,'💛 per 1 '+esc(c.symbol))+card((c.swap_fee_bps/100)+'%','Swap fee')+card(c.min_swap_yellow,'Minimum swap (💛)')+card(c.swap_enabled?'On':'Off','Swap')+'</div>'+
-   '<div class="bar" style="margin-top:14px"><input id="rt" type="number" step="any" value="'+esc(c.yellow_per_pxn)+'"><button class="pri" data-a="rate">Set new rate (owner)</button><button data-a="tokedit">Edit token settings</button></div>'+
-   '<h3>Rate history</h3>'+table([['created_at','When'],['yellow_per_pxn','Rate'],['changed_by','By']],h.rows);
+  const t=await A('read',{table:'token_config',eq:{id:1}}),c=t.rows[0]||{};CF.token.row=c;
+  v.innerHTML='<div class="cards">'+card(c.symbol,'Symbol')+card(c.network,'Network')+card(c.decimals,'Decimals')+card(c.jetton_master?'Set':'–','Jetton master')+'</div>'+
+   '<p class="mut">PXN is the direct withdrawable token. No swap.</p>'+
+   '<div class="bar" style="margin-top:14px"><button data-a="tokedit">Edit token settings</button></div>';
 };
-H.rate=()=>{const r=Number($('#rt').value);if(!(r>0))return toast('Enter a rate above 0');
-  if(confirm('Change rate to '+r+' 💛 per PXN? New swaps use it immediately.'))act(()=>A('set_rate',{yellow_per_pxn:r}),'Rate updated')};
 H.tokedit=()=>openForm('token',CF.token.row);
 
 SEC.market=async v=>{
