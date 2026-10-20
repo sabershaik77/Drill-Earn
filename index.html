@@ -149,18 +149,12 @@ function tcInit(){
       const ta=$('tc-addr');if(ta)ta.textContent='✓ Connected: '+fa.slice(0,6)+'…'+fa.slice(-4)})}
   return _tc;
 }
-$('wd').onclick=()=>{
+// ================= WITHDRAW & HISTORY UI =================
+
+function renderWithdrawForm() {
   const t=me.token,w=me.wallet;
-  const L=(me.withdrawals||[]).map(x=>{
-    let extra = '';
-    if (x.status === 'paid' && x.tx_hash) {
-      extra = ' · <a href="https://tonviewer.com/transaction/'+esc(x.tx_hash)+'" target="_blank" style="color:var(--grn);text-decoration:none;font-weight:bold">🔗 View Tx</a>';
-    } else if (x.reject_reason) {
-      extra = ' · ' + esc(x.reject_reason);
-    }
-    return '<div><span>'+(+x.pxn_amount)+' '+esc(t.symbol)+'</span><span style="text-align:right">'+esc(x.status)+extra+'</span></div>';
-  }).join('');
   const saved=me.player&&me.player.ton_wallet||'';
+  
   panel(
     '<h3>Withdraw '+esc(t.symbol)+'</h3>'+
     '<p>Balance: '+(+w.pxn).toFixed(4)+' '+esc(t.symbol)+'. Requests are reviewed by hand.</p>'+
@@ -170,10 +164,10 @@ $('wd').onclick=()=>{
     '<p style="text-align:center;opacity:.6;font-size:12px;margin:2px 0">— or paste address —</p>'+
     '<input id="wt" placeholder="TON address (EQ… / UQ…)" value="'+esc(tonFriendly(saved))+'">'+
     '<button class="big" id="wg">Request withdrawal</button>'+
-    '<div class="list">'+L+'</div>'
+    '<button id="wh-btn" style="background:none; border:none; color:var(--gold); text-decoration:underline; padding:10px; font-size:13px; cursor:pointer;">📜 View Transaction History</button>'
   );
 
-  // TON Connect button
+  // TON Connect button logic
   $('tc-btn').onclick=async()=>{
     const tc=tcInit();
     if(!tc)return toast('Wallet connect not available');
@@ -188,7 +182,6 @@ $('wd').onclick=()=>{
     }catch(e){toast('Connect failed')}
   };
 
-  // auto-update if wallet already connected
   try{
     const tc=tcInit();
     if(tc&&tc.connected&&tc.account&&tc.account.address){
@@ -198,14 +191,57 @@ $('wd').onclick=()=>{
     }
   }catch(e){}
 
+  // Request Withdrawal
   $('wg').onclick=async()=>{
     const a=+$('wa').value,ad=tonFriendly($('wt').value.trim());
     if(!(a>0))return toast('Enter amount');
     if(!/^(EQ|UQ)[A-Za-z0-9_-]{46}$/.test(ad))return toast('Enter a valid TON address');
-    try{await api('withdraw',{pxn:a,address:ad});await refresh();toast('Request sent');$('panel').style.display='none'}
-    catch(e){toast(msg(e))}
+    try{
+      await api('withdraw',{pxn:a,address:ad});
+      await refresh();
+      toast('Request sent');
+      $('panel').style.display='none';
+    }catch(e){toast(msg(e))}
   };
-};
+
+  // History Button
+  $('wh-btn').onclick = renderWithdrawHistory;
+}
+
+function renderWithdrawHistory() {
+  const t=me.token;
+  
+  const L=(me.withdrawals||[]).map(x=>{
+    let extra = '';
+    if (x.status === 'paid' && x.tx_hash) {
+      extra = '<a href="https://tonviewer.com/transaction/'+esc(x.tx_hash)+'" target="_blank" style="color:var(--grn);text-decoration:none;font-weight:bold">🔗 View Tx</a>';
+    } else if (x.reject_reason) {
+      extra = '<span style="color:#e0584a">'+esc(x.reject_reason)+'</span>';
+    }
+    const date = new Date(x.created_at).toLocaleDateString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+    
+    return '<div style="display:flex; flex-direction:column; gap:4px; background:var(--soil2); padding:10px; margin-bottom:6px; border-radius:4px;">'+
+             '<div style="display:flex; justify-content:space-between; font-weight:bold;">'+
+               '<span>'+(+x.pxn_amount)+' '+esc(t.symbol)+'</span>'+
+               '<span style="text-transform:uppercase; font-size:11px; color:'+(x.status==='paid'?'var(--grn)':x.status==='rejected'?'#e0584a':'var(--gold)')+'">'+esc(x.status)+'</span>'+
+             '</div>'+
+             '<div style="font-size:11px; color:#a89a82; display:flex; justify-content:space-between; align-items:center;">'+
+               '<span>'+date+'</span>'+
+               '<span>'+extra+'</span>'+
+             '</div>'+
+           '</div>';
+  }).join('');
+
+  panel(
+    '<h3>Transaction History</h3>'+
+    '<div class="list" style="max-height:350px; overflow-y:auto; margin-bottom:10px;">'+
+      (L||'<p class="mut">No transactions yet.</p>')+
+    '</div>'+
+    '<button class="big" onclick="renderWithdrawForm()">Back to Withdraw</button>'
+  );
+}
+
+$('wd').onclick=renderWithdrawForm;
 $('lb').onclick=async()=>{
   try{const r=await api('leaderboard');
     panel('<h3>Top players</h3><div class="list">'+(r.top.length?r.top.map(x=>'<div><span>'+x.rank+'. '+esc(x.username||x.first_name||'Player')+'</span><span>'+x.score+'</span></div>').join(''):'<p>No scores yet this season.</p>')+'</div>');
