@@ -151,7 +151,15 @@ function tcInit(){
 }
 $('wd').onclick=()=>{
   const t=me.token,w=me.wallet;
-  const L=(me.withdrawals||[]).map(x=>'<div><span>'+(+x.pxn_amount)+' '+esc(t.symbol)+'</span><span>'+esc(x.status)+(x.reject_reason?' · '+esc(x.reject_reason):'')+'</span></div>').join('');
+  const L=(me.withdrawals||[]).map(x=>{
+    let extra = '';
+    if (x.status === 'paid' && x.tx_hash) {
+      extra = ' · <a href="https://tonviewer.com/transaction/'+esc(x.tx_hash)+'" target="_blank" style="color:var(--grn);text-decoration:none;font-weight:bold">🔗 View Tx</a>';
+    } else if (x.reject_reason) {
+      extra = ' · ' + esc(x.reject_reason);
+    }
+    return '<div><span>'+(+x.pxn_amount)+' '+esc(t.symbol)+'</span><span style="text-align:right">'+esc(x.status)+extra+'</span></div>';
+  }).join('');
   const saved=me.player&&me.player.ton_wallet||'';
   panel(
     '<h3>Withdraw '+esc(t.symbol)+'</h3>'+
