@@ -157,7 +157,7 @@ H.pview=async b=>{try{
     '<p class="mut">Telegram ID '+p.tg_id+' · joined '+dt(p.created_at)+' · '+dv.length+' device(s)'+(p.ton_wallet?' · wallet '+esc(tonFriendly(p.ton_wallet)):'')+'</p>'+
     '<div class="bar">'+(p.status==='banned'?'<button class="pri" data-a="ban" data-b="0" data-id="'+p.id+'">Unban</button>':'<button class="dg" data-a="ban" data-b="1" data-id="'+p.id+'">Ban player</button>')+'<button data-a="close">Close</button></div>'+
     '<h4>Flags</h4>'+table([['created_at','When'],['rule','Rule'],['severity','Sev'],['status','Status']],d.flags)+
-    '<h4>Recent rounds</h4>'+table([['started_at','Started'],['status','Status'],['duration_ms','ms'],['score','Score'],['yellow','💛']],d.rounds.slice(0,10))+
+    '<h4>Recent rounds</h4>'+table([['started_at','Started'],['status','Status'],['duration_ms','ms'],['score','Score'],['cash','💵'],['blue','💠'],['pxn','PXN']],d.rounds.slice(0,10))+
     '<h4>Ledger</h4>'+table([['created_at','When'],['currency','Cur'],['amount','Amount'],['kind','Kind']],d.ledger.slice(0,15))+
     '<h4>Withdrawals</h4>'+table([['created_at','When'],['pxn_amount','PXN'],['status','Status']],d.withdrawals));
 }catch(e){toast(e.message)}};
@@ -238,6 +238,27 @@ function crud(n){const c=CF[n];return async v=>{
     table(c.cols,d.rows,r=>(c.x?c.x(r):'')+'<button data-a="edit" data-n="'+n+'" data-id="'+esc(r[c.pk])+'">Edit</button>'+(c.nodel?'':'<button class="dg" data-a="del" data-n="'+n+'" data-id="'+esc(r[c.pk])+'">Delete</button>'));
 }}
 ['tasks','rewards','leaderboard','store','drills','settings'].forEach(n=>SEC[n]=crud(n));
+// Settings: friendly Ads box above the generic key/value table
+const _setBase=SEC.settings;
+const sval=v=>{if(v==null)return '';if(typeof v==='string'){const t=v.trim();if(t.length>1&&t[0]==='"'&&t[t.length-1]==='"')return t.slice(1,-1);return t}return String(v)};
+SEC.settings=async v=>{
+  await _setBase(v);
+  const rows=(CF.settings.rows||[]),g=k=>{const r=rows.find(x=>x.key===k);return r?sval(r.value):''};
+  const prov=g('ad_provider')||'none',blk=g('ad_block_id');
+  const box=document.createElement('div');box.className='c';box.style.cssText='margin-bottom:14px;gap:8px;max-width:520px';
+  box.innerHTML='<b style="font-size:16px">📺 Ads</b><span>Which ad network the game uses for "Watch ad (+1 ⚡)". Owner only.</span>'+
+   '<div class="fm" style="margin:6px 0"><label>Ad provider<select id="adp">'+['none','adsgram','monetag'].map(o=>'<option'+(o===prov?' selected':'')+'>'+o+'</option>').join('')+'</select></label>'+
+   '<label>Ad block / zone ID<input id="adb" type="text" placeholder="Adsgram block id or Monetag zone id" value="'+esc(blk)+'"></label></div>'+
+   '<div class="bar" style="margin:0"><button class="pri" data-a="saveads">Save ads settings</button><span class="mut">none = ads off (players see "Ads not available")</span></div>';
+  v.insertBefore(box,v.firstChild);
+};
+H.saveads=()=>{
+  const p=$('#adp').value,b=$('#adb').value.trim();
+  if(p!=='none'&&!b)return toast('Enter the ad block / zone ID');
+  act(async()=>{
+    await A('crud',{table:'app_settings',op:'upsert',row:{key:'ad_provider',value:p,description:'Ad network: none | adsgram | monetag'}});
+    await A('crud',{table:'app_settings',op:'upsert',row:{key:'ad_block_id',value:b,description:'Ad block / zone ID for the selected provider'}});
+  },'Ads settings saved')};
 H.new=b=>openForm(b.dataset.n);
 H.edit=b=>{const c=CF[b.dataset.n];openForm(b.dataset.n,c.rows.find(r=>String(r[c.pk])===b.dataset.id))};
 H.del=b=>{const c=CF[b.dataset.n];if(confirm('Delete this '+c.one+'? This cannot be undone.'))act(()=>A('crud',{table:c.t,op:'delete',id:b.dataset.id}),'Deleted')};
@@ -250,7 +271,7 @@ H.scores=async b=>{try{
 SEC.token=async v=>{
   const t=await A('read',{table:'token_config',eq:{id:1}}),c=t.rows[0]||{};CF.token.row=c;
   v.innerHTML='<div class="cards">'+card(c.symbol,'Symbol')+card(c.network,'Network')+card(c.decimals,'Decimals')+card(c.jetton_master?'Set':'–','Jetton master')+'</div>'+
-   '<p class="mut">PXN is the direct withdrawable token. No swap.</p>'+
+   '<p class="mut">PXN is the direct withdrawable token.</p>'+
    '<div class="bar" style="margin-top:14px"><button data-a="tokedit">Edit token settings</button></div>';
 };
 H.tokedit=()=>openForm('token',CF.token.row);

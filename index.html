@@ -60,17 +60,18 @@ input{font:inherit;padding:10px;background:#15110b;border:2px solid #5a4a36;colo
 <div id="toast"></div>
 
 <script>
-// ================= SETTINGS (edit these two) =================
+// ================= SETTINGS =================
 const PROJECT_ID='vgesniwdlepqsezeerdc';        // Supabase Project ID
-const ADSGRAM_BLOCK_ID='';                 // Adsgram block id (leave empty until ad network is set up)
-// ==============================================================
+// Ads are configured from the admin panel (Settings: ad_provider + ad_block_id), nothing to edit here.
+// ============================================
 const API='https://'+PROJECT_ID+'.supabase.co/functions/v1/game';
 const TG=window.Telegram&&Telegram.WebApp;if(TG){TG.ready();TG.expand();try{TG.disableVerticalSwipes()}catch(e){}}
 const $=id=>document.getElementById(id),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const M={no_energy:'No energy left ⚡',ad_limit_reached:'No ads left today',ad_cooldown:'Wait a few seconds before the next ad',round_already_active:'A round is already running',banned:'This account is banned',below_min_swap:'Amount is below the minimum',swap_disabled:'Swap is turned off',withdraw_disabled:'Withdrawals are turned off',low_trust:'Account is under verification',account_too_new:'Account is too new. Try again later',bad_ton_address:'TON address is not valid',amount_out_of_range:'Amount is out of allowed range',daily_cap:'Daily withdraw limit reached',under_review:'Account is under review',account_restricted:'Account is restricted',init_data_expired:'Reopen the game from Telegram',bad_init_data:'Open this game from Telegram',unauthorized:'Session expired. Reopen the game',network:'Network problem. Try again'};
+const M={no_energy:'No energy left ⚡',ad_limit_reached:'No ads left today',ad_cooldown:'Wait a few seconds before the next ad',round_already_active:'A round is already running',banned:'This account is banned',withdraw_disabled:'Withdrawals are turned off',low_trust:'Account is under verification',account_too_new:'Account is too new. Try again later',bad_ton_address:'TON address is not valid',amount_out_of_range:'Amount is out of allowed range',daily_cap:'Daily withdraw limit reached',under_review:'Account is under review',account_restricted:'Account is restricted',init_data_expired:'Reopen the game from Telegram',bad_init_data:'Open this game from Telegram',unauthorized:'Session expired. Reopen the game',network:'Network problem. Try again'};
 const msg=e=>{const m=e&&e.message||'error';return M[m]||(/check constraint/.test(m)?'Not enough balance':m)};
 let token=null,me=null,R=null,busy=0,nextAt=0;
+let AD={provider:'none',block:''},_mtLoaded='';
 function dev(){let d=localStorage.getItem('dv');if(!d){d=Array.from(crypto.getRandomValues(new Uint8Array(12)),b=>b.toString(16).padStart(2,'0')).join('');localStorage.setItem('dv',d)}return d}
 async function api(action,data={},retry){
   let r,j;
@@ -80,7 +81,16 @@ async function api(action,data={},retry){
   return j;
 }
 async function login(){const j=await api('auth',{initData:TG?TG.initData:'',device:dev()});token=j.token}
-async function refresh(){me=await api('me');renderMenu()}
+const adVal=v=>{v=v==null?'':String(v).trim();if(v.length>1&&v[0]==='"'&&v[v.length-1]==='"')v=v.slice(1,-1);return v};
+function loadMonetag(zone){
+  if(!zone||_mtLoaded===zone)return;_mtLoaded=zone;
+  const sc=document.createElement('script');sc.src='https://libtl.com/sdk.js';sc.dataset.zone=zone;sc.dataset.sdk='show_'+zone;sc.async=true;
+  document.head.appendChild(sc)}
+async function refresh(){
+  me=await api('me');
+  AD.provider=adVal(me.ad_provider).toLowerCase()||'none';AD.block=adVal(me.ad_block_id);
+  if(AD.provider==='monetag')loadMonetag(AD.block);
+  renderMenu()}
 function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',2600)}
 
 // ---------- menu ----------
@@ -107,9 +117,16 @@ $('pl').onclick=async()=>{
   $('pl').disabled=false;
 };
 $('adb').onclick=async()=>{
-  if(!ADSGRAM_BLOCK_ID||!window.Adsgram){toast('Ads are not set up yet');return}
-  let s;try{s=await api('ad_start',{network:'adsgram'})}catch(e){return toast(msg(e))}
-  try{await window.Adsgram.init({blockId:ADSGRAM_BLOCK_ID}).show()}catch(e){return toast('Ad was not completed')}
+  const prov=AD.provider;
+  if(!prov||prov==='none'||!AD.block)return toast('Ads not available');
+  const hasMt=prov==='monetag'&&typeof window['show_'+AD.block]==='function';
+  const hasAg=!!(window.Adsgram&&AD.block);
+  if(!hasMt&&!hasAg)return toast('Ads not available');
+  let s;try{s=await api('ad_start',{network:hasMt?'monetag':'adsgram'})}catch(e){return toast(msg(e))}
+  try{
+    if(hasMt)await window['show_'+AD.block]();            // Monetag rewarded interstitial
+    else await window.Adsgram.init({blockId:AD.block}).show(); // Adsgram (also fallback when Monetag SDK is missing)
+  }catch(e){return toast('Ad was not completed')}
   const before=me.energy.energy;
   for(let i=0;i<6;i++){await sleep(1500);await refresh().catch(()=>{});if(me.energy.energy>before)return toast('+1 ⚡')}
   toast('Energy will arrive in a moment');
@@ -126,7 +143,10 @@ const TC_MANIFEST='https://sabershaik77.github.io/Drill-Earn/tonconnect-manifest
 let _tc=null;
 function tcInit(){
   if(!window.TON_CONNECT_UI)return null;
-  if(!_tc)_tc=new TON_CONNECT_UI.TonConnectUI({manifestUrl:TC_MANIFEST});
+  if(!_tc){_tc=new TON_CONNECT_UI.TonConnectUI({manifestUrl:TC_MANIFEST});
+    _tc.onStatusChange(w=>{const el=$('wt');if(!el||!w||!w.account)return;
+      const fa=tonFriendly(w.account.address);el.value=fa;
+      const ta=$('tc-addr');if(ta)ta.textContent='✓ Connected: '+fa.slice(0,6)+'…'+fa.slice(-4)})}
   return _tc;
 }
 $('wd').onclick=()=>{
@@ -202,7 +222,7 @@ function genLayout(seed){
 // ---------- game ----------
 const C=$('c'),X=C.getContext('2d');
 const wc=document.createElement('canvas');wc.width=wc.height=W;const wx=wc.getContext('2d');
-let vw,vh;function rs(){vw=C.width=innerWidth;vh=C.height=innerHeight}rs();onresize=rs;
+let vw,vh;function rs(){vw=C.width=innerWidth;vh=C.height=innerHeight;X.imageSmoothingEnabled=false}rs();onresize=rs;
 let SEED=0;
 const h=(a,b)=>{let n=Math.sin(a*127.1+b*311.7+7+SEED)*43758.5;return n-Math.floor(n)};
 const tones=['#7a6f66','#8a7e74','#6b6159','#948579'];
@@ -341,7 +361,7 @@ function loop(t){
 function tri(x,y,r,rot,c){X.fillStyle=c;X.beginPath();for(let k=0;k<3;k++){const a=rot+k*2.1;X.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r)}X.fill()}
 function diamond(x,y,r,c,c2){X.fillStyle=c;X.beginPath();X.moveTo(x,y-r);X.lineTo(x+r*.8,y);X.lineTo(x,y+r);X.lineTo(x-r*.8,y);X.fill();X.fillStyle=c2;X.fillRect(x-2,y-r*.5,3,3)}
 function draw(t){
-  X.imageSmoothingEnabled=false;X.fillStyle='#000';X.fillRect(0,0,vw,vh);
+  X.fillStyle='#000';X.fillRect(0,0,vw,vh);
   const sx=vw/2,sy=vh*.42,sh=P.shake?(rnd()-.5)*6:0;
   X.save();X.translate(sx-P.x+sh,sy-P.y+sh);
   {const x0=Math.max(0,Math.floor((P.x-sx)/S)),y0=Math.max(0,Math.floor((P.y-sy)/S)),x1=Math.min(W,Math.ceil((P.x+vw-sx)/S)),y1=Math.min(W,Math.ceil((P.y+vh-sy)/S));X.drawImage(wc,x0,y0,x1-x0,y1-y0,x0*S,y0*S,(x1-x0)*S,(y1-y0)*S)}
