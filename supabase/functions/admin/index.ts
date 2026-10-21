@@ -8,13 +8,13 @@ const RANK: Record<string, number> = { viewer: 0, support: 1, admin: 2, owner: 3
 
 const READ = new Set([
   "players", "rounds", "ledger", "withdrawals", "swaps", "anticheat_flags", "bans", "audit_log",
-  "ad_sessions", "marketplace_listings", "player_drills", "task_completions", "reward_claims",
+  "ad_sessions", "marketplace_listings", "player_drills", "attachments", "task_completions", "reward_claims",
   "leaderboard_scores", "store_purchases", "token_rate_history", "earn_tasks", "rewards", "drills",
   "store_items", "leaderboard_seasons", "app_settings", "token_config", "admin_users",
 ]);
 // tables the panel may create/edit/delete rows in (value = primary key column)
 const CRUD: Record<string, string> = {
-  earn_tasks: "id", rewards: "id", drills: "id", store_items: "id",
+  earn_tasks: "id", rewards: "id", drills: "id", attachments: "id", store_items: "id",
   leaderboard_seasons: "id", app_settings: "key", token_config: "id",
 };
 const NO_DELETE = new Set(["app_settings", "token_config"]);
@@ -98,6 +98,22 @@ Deno.serve(async (req) => {
         if (error) throw new Error(error.message);
         await audit("resolve_flag_" + body.status, "anticheat_flag", String(body.id), null, data);
         return json({ ok: true });
+      }
+
+      case "grant_item": {
+        need("admin");
+        const type = String(body.type);
+        const id = Number(body.item_id);
+        const player_id = String(body.player_id);
+        if (!player_id || !type || !id) throw new Error("bad_request");
+        
+        if (type === 'store') {
+          const res = await rpc("admin_grant_store_item", { p_admin: me, p_player: player_id, p_store_item: id, p_ip: ip });
+          return json(res);
+        } else {
+          const res = await rpc("admin_grant_item", { p_admin: me, p_player: player_id, p_type: type, p_item: id, p_ip: ip });
+          return json(res);
+        }
       }
 
       case "set_rate": {
