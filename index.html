@@ -131,8 +131,8 @@ $('adb').onclick=async()=>{
   if(!hasMt&&!hasAg)return toast('Ads not available');
   let s;try{s=await api('ad_start',{network:hasMt?'monetag':'adsgram'})}catch(e){return toast(msg(e))}
   try{
-    if(hasMt)await window['show_'+AD.block]();            // Monetag rewarded interstitial
-    else await window.Adsgram.init({blockId:AD.block}).show(); // Adsgram (also fallback when Monetag SDK is missing)
+    if(hasMt) await window['show_'+AD.block]({ ymid: s.session });  // <--- Yahan s.session pass kiya hai
+    else await window.Adsgram.init({blockId:AD.block}).show();      // Adsgram
   }catch(e){return toast('Ad was not completed')}
   const before=me.energy.energy;
   for(let i=0;i<6;i++){await sleep(1500);await refresh().catch(()=>{});if(me.energy.energy>before)return toast('+1 ⚡')}
