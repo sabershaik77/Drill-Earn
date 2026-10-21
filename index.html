@@ -31,6 +31,13 @@ input{font:inherit;padding:10px;background:#15110b;border:2px solid #5a4a36;colo
 .list div{display:flex;justify-content:space-between;gap:8px;background:var(--soil2);padding:6px 8px}
 #toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 56px);transform:translateX(-50%);background:var(--gold);color:#201800;padding:8px 14px;font-size:14px;display:none;z-index:9;max-width:90%;text-align:center}
 .pxi{width:18px;height:18px;vertical-align:middle;margin-right:4px}
+#lbw{overflow:auto;touch-action:pan-y;display:flex;flex-direction:column;gap:10px;text-align:left}
+.pzg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pz{background:var(--soil2);border:2px solid #5a4a36;padding:8px 4px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0}
+.pz.r1{border-color:#ffd21a}.pz.r2{border-color:#c9d1d9}.pz.r3{border-color:#cd7f32}
+.pz img,.pz .ph{width:44px;height:44px;object-fit:contain;image-rendering:auto}
+.pz .ph{display:flex;align-items:center;justify-content:center;font-size:26px}
+.pz b{font-size:15px}.pz small{font-size:11px;opacity:.85;overflow-wrap:anywhere}
 #sndbtn.off{background:#8a4a40;border-color:#b86a5a;color:#fff}
 </style></head><body>
 <canvas id="c"></canvas>
@@ -124,8 +131,8 @@ $('adb').onclick=async()=>{
   if(!hasMt&&!hasAg)return toast('Ads not available');
   let s;try{s=await api('ad_start',{network:hasMt?'monetag':'adsgram'})}catch(e){return toast(msg(e))}
   try{
-    if(hasMt) await window['show_'+AD.block]({ ymid: s.session });  // <--- Yahan s.session pass kiya hai
-    else await window.Adsgram.init({blockId:AD.block}).show();      // Adsgram
+    if(hasMt)await window['show_'+AD.block]();            // Monetag rewarded interstitial
+    else await window.Adsgram.init({blockId:AD.block}).show(); // Adsgram (also fallback when Monetag SDK is missing)
   }catch(e){return toast('Ad was not completed')}
   const before=me.energy.energy;
   for(let i=0;i<6;i++){await sleep(1500);await refresh().catch(()=>{});if(me.energy.energy>before)return toast('+1 ⚡')}
@@ -242,9 +249,22 @@ function renderWithdrawHistory() {
 }
 
 $('wd').onclick=renderWithdrawForm;
+const PZ_LBL={pxn:'PXN',cash:'💵 Cash',blue:'💠 Sky',drill:'⛏ Drill',attachment:'🔧 Attachment'};
+const PZ_ICO={pxn:'🪙',cash:'💵',blue:'💠',drill:'⛏',attachment:'🔧'};
+function prizeHtml(prizes){
+  if(!Array.isArray(prizes)||!prizes.length)return '';
+  const by={};prizes.forEach(p=>{if(p&&p.rank)by[p.rank]=p});
+  const box=k=>{const p=by[k];
+    if(!p)return '<div class="pz r'+k+'"><div class="ph">–</div><b>#'+k+'</b><small>No prize</small></div>';
+    const u=String(p.image_url||'').trim(),ty=String(p.type||'');
+    const img=/^https?:\/\//i.test(u)?'<img src="'+esc(u)+'" alt="" onerror="this.outerHTML=\'<div class=ph>'+(PZ_ICO[ty]||'🎁')+'</div>\'">':'<div class="ph">'+(PZ_ICO[ty]||'🎁')+'</div>';
+    return '<div class="pz r'+k+'">'+img+'<b>#'+k+'</b><small>'+esc(PZ_LBL[ty]||ty)+'</small><small>×'+esc(p.amount)+'</small></div>'};
+  return '<h3>🏆 Season Prizes</h3><div class="pzg">'+box(1)+box(2)+box(3)+'</div>';
+}
 $('lb').onclick=async()=>{
   try{const r=await api('leaderboard');
-    panel('<h3>Top players</h3><div class="list">'+(r.top.length?r.top.map(x=>'<div><span>'+x.rank+'. '+esc(x.username||x.first_name||'Player')+'</span><span>'+x.score+'</span></div>').join(''):'<p>No scores yet this season.</p>')+'</div>');
+    const top=r.top||[];
+    panel('<div id="lbw">'+prizeHtml(r.prizes)+'<h3>Top players</h3><div class="list">'+(top.length?top.map(x=>'<div><span>'+x.rank+'. '+esc(x.username||x.first_name||'Player')+'</span><span>'+x.score+'</span></div>').join(''):'<p>No scores yet this season.</p>')+'</div></div>');
   }catch(e){toast(msg(e))}
 };
 $('ob').onclick=()=>{showMenu();refresh().catch(()=>{})};
