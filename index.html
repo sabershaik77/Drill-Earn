@@ -39,6 +39,19 @@ input{font:inherit;padding:10px;background:#15110b;border:2px solid #5a4a36;colo
 .pz .ph{display:flex;align-items:center;justify-content:center;font-size:26px}
 .pz b{font-size:15px}.pz small{font-size:11px;opacity:.85;overflow-wrap:anywhere}
 #sndbtn.off{background:#8a4a40;border-color:#b86a5a;color:#fff}
+.prow{display:grid;grid-template-columns:3fr 2fr;gap:6px}.prow button{font-size:14px;padding:10px 6px}.prow .big{font-size:17px}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px}.tabs button{padding:9px 4px;font-size:14px}.tabs button.on{background:var(--grn);border-color:#a8e08c;color:#102008;font-weight:bold}
+.inv{overflow:auto;touch-action:pan-y;display:flex;flex-direction:column;gap:6px;text-align:left}
+.it{display:flex;gap:10px;align-items:center;background:var(--soil2);border:2px solid #5a4a36;padding:8px}
+.it.eq{border-color:var(--gold)}
+.it img,.it .ph{width:48px;height:48px;object-fit:contain;flex:none;image-rendering:auto;background:#15110b}
+.it .ph{display:flex;align-items:center;justify-content:center;font-size:26px}
+.it .inf{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.it .inf b{font-size:14px;overflow-wrap:anywhere}.it .inf small{font-size:11px;opacity:.85}
+.it button{padding:8px 10px;font-size:12px;flex:none}
+.it button.on{background:var(--gold);border-color:#ffe680;color:#201800;font-weight:bold}
+.slt{font-size:13px;color:var(--gold);margin:6px 0 0}
+.tot{font-size:12px;background:var(--soil2);padding:6px 8px;text-align:left}
 </style></head><body>
 <canvas id="c"></canvas>
 <div id="hud"><div id="hp"><div id="hpf"></div></div><span id="sc">Score 0</span><span id="cs">💵0</span><span id="sk">💠0</span><span id="gd"><img class="pxi" alt="PXN"><span id="gdv">0</span></span></div>
@@ -50,7 +63,7 @@ input{font:inherit;padding:10px;background:#15110b;border:2px solid #5a4a36;colo
   <h2>⛏ Drill & Earn</h2>
   <div class="row"><b id="en">⚡ 0/24</b><small id="nx"></small></div>
   <div class="bal"><span id="by"><img class="pxi" alt="PXN"><span id="byv">0</span></span><span id="bc">💵 0</span><span id="bb">💠 0</span></div>
-  <button class="big" id="pl">▶ Play (1 ⚡)</button>
+  <div class="prow"><button class="big" id="pl">▶ Play (1 ⚡)</button><button id="inv">🎒 Inventory</button></div>
   <button id="adb">📺 Watch ad (+1 ⚡)</button>
   <div class="grid" style="grid-template-columns:1fr 1fr"><button id="wd">💸 Withdraw</button><button id="lb">🏆 Top 50</button></div>
   <button id="stb">⚙ Settings</button>
@@ -75,7 +88,7 @@ const API='https://'+PROJECT_ID+'.supabase.co/functions/v1/game';
 const TG=window.Telegram&&Telegram.WebApp;if(TG){TG.ready();TG.expand();try{TG.disableVerticalSwipes()}catch(e){}}
 const $=id=>document.getElementById(id),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const M={no_energy:'No energy left ⚡',ad_limit_reached:'No ads left today',ad_cooldown:'Wait a few seconds before the next ad',round_already_active:'A round is already running',banned:'This account is banned',withdraw_disabled:'Withdrawals are turned off',low_trust:'Account is under verification',account_too_new:'Account is too new. Try again later',bad_ton_address:'TON address is not valid',amount_out_of_range:'Amount is out of allowed range',daily_cap:'Daily withdraw limit reached',under_review:'Account is under review',account_restricted:'Account is restricted',init_data_expired:'Reopen the game from Telegram',bad_init_data:'Open this game from Telegram',unauthorized:'Session expired. Reopen the game',network:'Network problem. Try again'};
+const M={no_energy:'No energy left ⚡',ad_limit_reached:'No ads left today',ad_cooldown:'Wait a few seconds before the next ad',round_already_active:'A round is already running',banned:'This account is banned',withdraw_disabled:'Withdrawals are turned off',low_trust:'Account is under verification',account_too_new:'Account is too new. Try again later',bad_ton_address:'TON address is not valid',amount_out_of_range:'Amount is out of allowed range',daily_cap:'Daily withdraw limit reached',under_review:'Account is under review',account_restricted:'Account is restricted',init_data_expired:'Reopen the game from Telegram',bad_init_data:'Open this game from Telegram',unauthorized:'Session expired. Reopen the game',network:'Network problem. Try again',not_owned:'You do not own this item',item_inactive:'This item is not available',slot_mismatch:'Wrong slot',bad_item:'Invalid item',player_not_found:'Player not found'};
 const msg=e=>{const m=e&&e.message||'error';return M[m]||(/check constraint/.test(m)?'Not enough balance':m)};
 let token=null,me=null,R=null,busy=0,nextAt=0;
 let AD={provider:'none',block:''},_mtLoaded='';
@@ -97,7 +110,7 @@ async function refresh(){
   me=await api('me');
   AD.provider=adVal(me.ad_provider).toLowerCase()||'none';AD.block=adVal(me.ad_block_id);
   if(AD.provider==='monetag')loadMonetag(AD.block);
-  renderMenu()}
+  prepGear();renderMenu()}
 function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',2600)}
 
 // ---------- menu ----------
@@ -116,11 +129,11 @@ setInterval(()=>{
   if(s===0&&!busy){busy=1;refresh().catch(()=>{}).finally(()=>busy=0)}
 },1000);
 function showMenu(){playing=false;syncMusic();document.body.className='';$('over').style.display='none';$('panel').style.display='none';$('menu').style.display='flex'}
-function panel(html){$('pc').innerHTML=html+'<button id="px">Close</button>';$('px').onclick=()=>$('panel').style.display='none';$('panel').style.display='flex'}
+function panel(html){$('pc').dataset.v='';$('pc').innerHTML=html+'<button id="px">Close</button>';$('px').onclick=()=>$('panel').style.display='none';$('panel').style.display='flex'}
 
 $('pl').onclick=async()=>{
   $('pl').disabled=true;
-  try{R=await api('start_round');me.energy.energy=R.energy_left;begin(R.seed)}catch(e){toast(msg(e))}
+  try{R=await api('start_round');me.energy.energy=R.energy_left;begin(R.seed,R.loadout)}catch(e){toast(msg(e))}
   $('pl').disabled=false;
 };
 $('adb').onclick=async()=>{
@@ -269,6 +282,71 @@ $('lb').onclick=async()=>{
 };
 $('ob').onclick=()=>{showMenu();refresh().catch(()=>{})};
 
+
+// ================= INVENTORY & EQUIPMENT =================
+const SLOTS=[['front','Front'],['side','Side'],['back','Back']];
+const IMG=new Map();
+function gimg(u){u=String(u||'').trim();if(!/^https?:\/\//i.test(u))return null;
+  let e=IMG.get(u);
+  if(!e){e={im:new Image(),ok:false};e.im.onload=()=>{e.ok=true};e.im.onerror=()=>{e.bad=1};e.im.src=u;IMG.set(u,e)}
+  return e.ok?e.im:null}
+let INV={drills:[],attachments:[],pd:[],pa:[],tab:'drills'};
+async function loadInv(){
+  const j=await api('get_inventory');
+  INV.drills=j.drills||[];INV.attachments=j.attachments||[];INV.pd=j.player_drills||[];INV.pa=j.player_attachments||[];
+  [].concat(INV.drills,INV.attachments).forEach(x=>gimg(x.image_url));
+}
+function prepGear(){if(!me)return;gimg(me.equipped_drill&&me.equipped_drill.image_url);(me.equipped_attachments||[]).forEach(a=>gimg(a.image_url))}
+const pct=v=>(v>0?'+':'')+Math.round(v*100)+'%';
+function statTxt(o){
+  const t=[],sm=+o.speed_mult||1,hp=+o.hp_bonus||0,dr=+o.damage_reduction||0;
+  if(Math.abs(sm-1)>.0001)t.push('⚡ '+pct(sm-1)+' Speed');
+  if(hp)t.push('❤ '+(hp>0?'+':'')+hp+' HP');
+  if(dr>0)t.push('🛡 '+Math.round(dr*100)+'% less stone dmg');
+  return t.length?t.join(' · '):'No bonus'}
+function itemRow(o,eq,ico,btn,extra){
+  const u=String(o.image_url||'').trim();
+  const im=/^https?:\/\//i.test(u)?'<img src="'+esc(u)+'" alt="" onerror="this.outerHTML=\'<div class=ph>'+ico+'</div>\'">':'<div class="ph">'+ico+'</div>';
+  return '<div class="it'+(eq?' eq':'')+'">'+im+'<div class="inf"><b>'+esc(o.name)+'</b>'+(extra?'<small>'+extra+'</small>':'')+'<small>'+statTxt(o)+'</small></div>'+btn+'</div>'}
+function renderInventory(){
+  const eqD=me.equipped_drill,eqA=me.equipped_attachments||[],st=me.stats||{};
+  const tab=INV.tab;let body='';
+  if(tab==='drills'){
+    const best={};
+    INV.pd.forEach(r=>{const c=best[r.drill_id];if(!c||r.equipped||(!c.equipped&&r.level>c.level))best[r.drill_id]=r});
+    const rows=Object.values(best).map(r=>({r,d:INV.drills.find(x=>x.id===r.drill_id)})).filter(x=>x.d);
+    body=rows.length?rows.map(({r,d})=>itemRow(d,r.equipped,'⛏',
+      r.equipped?'<button class="on" disabled>✓ Equipped</button>':'<button data-eq="drill:'+d.id+':1">Select</button>',
+      esc(d.rarity||'')+' · Lv '+r.level)).join(''):'<p>You do not own any drill yet.</p>';
+  }else{
+    const own=INV.pa.map(r=>({r,a:INV.attachments.find(x=>x.id===r.attachment_id)})).filter(x=>x.a);
+    body='<div class="tot">Total bonus: '+statTxt(st)+'</div>'+SLOTS.map(([k,l])=>{
+      const L=own.filter(x=>x.a.slot===k);
+      return '<div class="slt">'+l+'</div>'+(L.length?L.map(({r,a})=>itemRow(a,r.equipped,'🔧',
+        r.equipped?'<button class="on" data-eq="attachment:'+a.id+':0">Unequip</button>':'<button data-eq="attachment:'+a.id+':1">Equip</button>')).join(''):'<p>Nothing owned for this slot.</p>')}).join('');
+  }
+  panel('<h3>🎒 Inventory</h3>'+
+    '<div class="tabs"><button class="'+(tab==='drills'?'on':'')+'" data-tab="drills">⛏ Drills</button><button class="'+(tab==='attachments'?'on':'')+'" data-tab="attachments">🔧 Attachments</button></div>'+
+    '<div class="inv">'+body+'</div>');
+  $('pc').dataset.v='inv';
+}
+async function equipItem(type,id,on){
+  try{
+    const r=await api('equip_item',{type,id,equip:on});
+    me.equipped_drill=r.equipped_drill;me.equipped_attachments=r.equipped_attachments;me.stats=r.stats;
+    await loadInv();prepGear();
+    if($('pc').dataset.v==='inv')renderInventory();
+    toast(on?'Equipped ✓':'Unequipped');
+  }catch(e){toast(msg(e))}
+}
+$('pc').addEventListener('click',e=>{
+  const t=e.target.closest('[data-tab]');if(t){INV.tab=t.dataset.tab;renderInventory();return}
+  const b=e.target.closest('[data-eq]');if(!b)return;
+  const [ty,id,on]=b.dataset.eq.split(':');equipItem(ty,+id,on==='1')});
+$('inv').onclick=async()=>{
+  renderInventory();
+  try{await loadInv();if($('pc').dataset.v==='inv')renderInventory()}catch(e){toast(msg(e))}};
+
 // ---------- map (MUST match server layout.ts) ----------
 const W=640,S=6,WS=3840,N_ITEMS=4200;
 function mb(a){return()=>{a|=0;a=(a+0x6D2B79F5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296}}
@@ -290,7 +368,10 @@ let vw,vh;function rs(){vw=C.width=innerWidth;vh=C.height=innerHeight;X.imageSmo
 let SEED=0;
 const h=(a,b)=>{let n=Math.sin(a*127.1+b*311.7+7+SEED)*43758.5;return n-Math.floor(n)};
 const tones=['#7a6f66','#8a7e74','#6b6159','#948579'];
-let dug,items=[],P={x:0,y:0,a:0,roll:0,hp:100,score:0,cash:0,sky:0,pxn:0,shake:0},fx=[],txt=[],st=0,ev=[],gt=0;
+let dug,items=[],P={x:0,y:0,a:0,roll:0,hp:100,maxhp:100,score:0,cash:0,sky:0,pxn:0,shake:0},fx=[],txt=[],st=0,ev=[],gt=0;
+// Round stats from the server's loadout snapshot (must match layout.ts: speed 90*mult, HP 100+bonus, stone 10*(1-reduction))
+const BASE_SPEED=90,BASE_HP=100,STONE_DMG=10,DRILL_SZ=44;
+let GS={spd:BASE_SPEED,maxhp:BASE_HP,dmg:STONE_DMG,dr:0},GEAR={drill:'',att:[]};
 const rnd=Math.random;
 // PXN collectible image (base64 — original file se copy karo; agar nahi mila to fallback circle draw hoga)
 // PXN icon: yahan apna image URL daalo (https wala direct .png/.webp link). Khali chhodo to neeche wala embedded icon use hoga.
@@ -303,7 +384,12 @@ function loadPxn(src,fb){const im=new Image();im.decoding='async';
   im.onerror=()=>{if(fb)loadPxn(fb)};im.src=src}
 loadPxn(PXN_URL||PXN_FALLBACK,PXN_URL?PXN_FALLBACK:null);
 document.querySelectorAll('.pxi').forEach(i=>{i.onerror=()=>{i.onerror=null;i.src=PXN_FALLBACK};i.src=PXN_URL||PXN_FALLBACK});
-function begin(seed){
+function begin(seed,lo){
+  lo=lo||{};
+  const sm=Number.isFinite(+lo.speed_mult)&&+lo.speed_mult>0?+lo.speed_mult:1,hb=Number.isFinite(+lo.hp_bonus)?Math.trunc(+lo.hp_bonus):0,dr=Number.isFinite(+lo.damage_reduction)?Math.min(.9,Math.max(0,+lo.damage_reduction)):0;
+  GS={spd:BASE_SPEED*sm,maxhp:BASE_HP+hb,dr,dmg:STONE_DMG*(1-dr)};
+  GEAR={drill:lo.drill&&lo.drill.image_url||'',att:(lo.attachments||[]).map(a=>({slot:a.slot,url:a.image_url||''}))};
+  gimg(GEAR.drill);GEAR.att.forEach(a=>gimg(a.url));
   dug=new Uint8Array(W*W);SEED=seed%1000;
   for(let j=0;j<W;j++)for(let i=0;i<W;i++){
     wx.fillStyle=tones[Math.floor(h(i>>2,j>>2)*4)];
@@ -311,7 +397,7 @@ function begin(seed){
     wx.fillRect(i,j,1,1);
   }
   const L=genLayout(seed);
-  P={x:L.start.x,y:L.start.y,a:L.start.a,roll:0,hp:100,score:0,cash:0,sky:0,pxn:0,shake:0};
+  P={x:L.start.x,y:L.start.y,a:L.start.a,roll:0,hp:GS.maxhp,maxhp:GS.maxhp,score:0,cash:0,sky:0,pxn:0,shake:0};
   items=L.items;fx=[];txt=[];ev=[];gt=0;
   dig();upd();
   document.body.className='play';$('menu').style.display='none';$('over').style.display='none';st=1;playing=true;syncMusic();
@@ -327,7 +413,7 @@ function dig(){
   }
 }
 function upd(){
-  $('hpf').style.width=Math.max(0,P.hp)+'%';
+  $('hpf').style.width=Math.max(0,P.hp/P.maxhp*100)+'%';
   $('sc').textContent='Score '+P.score;$('cs').textContent='💵'+P.cash;$('sk').textContent='💠'+P.sky;$('gdv').textContent=P.pxn;
 }
 function pop(x,y,s,c){txt.push({x,y,s,c,l:1})}
@@ -401,13 +487,13 @@ function loop(t){
     if(K.a||K.arrowleft)ix=-1;if(K.d||K.arrowright)ix=1;if(K.w||K.arrowup)iy=-1;if(K.s||K.arrowdown)iy=1;
     const m=Math.min(1,Math.hypot(ix,iy));
     if(m>.1){const a=Math.atan2(iy,ix);let da=a-P.a;da=Math.atan2(Math.sin(da),Math.cos(da));P.a+=da*Math.min(1,dt*8)}
-    const nx=P.x+Math.cos(P.a)*90*dt,ny=P.y+Math.sin(P.a)*90*dt;
+    const nx=P.x+Math.cos(P.a)*GS.spd*dt,ny=P.y+Math.sin(P.a)*GS.spd*dt;
     if(nx<30||nx>WS-30||ny<30||ny>WS-30){P.a+=Math.PI*.75}else{P.x=nx;P.y=ny}
     gt+=dt*1000;P.roll+=10*dt;dig();
     for(const it of items){if(it.d)continue;
       if(Math.abs(it.x-P.x)>30||Math.abs(it.y-P.y)>30)continue;
       if(Math.hypot(it.x-P.x,it.y-P.y)<26){it.d=1;ev.push({i:it.i,t:Math.round(gt)});
-        if(it.t=='stone'){P.hp-=10;P.shake=.3;burst(it.x,it.y,'#d9622b',14);pop(it.x,it.y,'-10 HP','#ff6a5a');snd('stone')}
+        if(it.t=='stone'){P.hp-=GS.dmg;P.shake=.3;burst(it.x,it.y,'#d9622b',14);pop(it.x,it.y,'-'+(+GS.dmg.toFixed(1))+' HP','#ff6a5a');snd('stone')}
         else if(it.t=='cash'){P.cash+=1;burst(it.x,it.y,'#7dd35a',10);pop(it.x,it.y,'+1','#f6c98f');snd('cash')}
         else if(it.t=='score'){P.score+=5;burst(it.x,it.y,'#fff',10);pop(it.x,it.y,'+5','#fff');snd('score')}
         else if(it.t=='sky'){P.sky+=1;burst(it.x,it.y,'#5fd4ff',12);pop(it.x,it.y,'+1','#7fe3ff');snd('sky')}
@@ -424,6 +510,17 @@ function loop(t){
 }
 function tri(x,y,r,rot,c){X.fillStyle=c;X.beginPath();for(let k=0;k<3;k++){const a=rot+k*2.1;X.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r)}X.fill()}
 function diamond(x,y,r,c,c2){X.fillStyle=c;X.beginPath();X.moveTo(x,y-r);X.lineTo(x+r*.8,y);X.lineTo(x,y+r);X.lineTo(x-r*.8,y);X.fill();X.fillStyle=c2;X.fillRect(x-2,y-r*.5,3,3)}
+// Attachments are drawn in drill-local space (+x = tip, +y = right side). Images should face right like the drill.
+const GEAR_POS={front:{x:27,y:0,s:26},side:{x:0,y:19,s:22},back:{x:-25,y:0,s:24}},GEAR_COL={front:'#ff9d2e',side:'#9aa7b4',back:'#c0504d'};
+function drawGear(){
+  for(const a of GEAR.att){
+    const g=GEAR_POS[a.slot];if(!g)continue;
+    const im=gimg(a.url),sides=a.slot==='side'?[1,-1]:[1];
+    for(const m of sides){
+      X.save();X.translate(g.x,g.y*m);if(m<0)X.scale(1,-1);
+      if(im){X.imageSmoothingEnabled=true;X.drawImage(im,-g.s/2,-g.s/2,g.s,g.s);X.imageSmoothingEnabled=false}
+      else{X.fillStyle=GEAR_COL[a.slot];X.fillRect(-g.s/4,-g.s/4,g.s/2,g.s/2);X.fillStyle='rgba(0,0,0,.35)';X.fillRect(-g.s/4,-g.s/4,g.s/2,3)}
+      X.restore()}}}
 function draw(t){
   X.fillStyle='#000';X.fillRect(0,0,vw,vh);
   const sx=vw/2,sy=vh*.42,sh=P.shake?(rnd()-.5)*6:0;
@@ -441,12 +538,18 @@ function draw(t){
       else{X.fillStyle='#ffd21a';X.beginPath();X.arc(x,y,rr*.8,0,6.283);X.fill();X.fillStyle='#fff3a0';X.fillRect(x-2,y-6,4,4)}}
   }
   for(const f of fx){X.fillStyle=f.c;X.fillRect(f.x,f.y,4,4)}
-  X.save();X.translate(P.x,P.y);
-  X.rotate(P.a);X.fillStyle='#e0b48a';X.beginPath();X.moveTo(22,0);X.lineTo(8,-8);X.lineTo(8,8);X.fill();
-  X.fillStyle='#b88a62';X.fillRect(12,-1,6,2);
-  X.rotate(P.roll-P.a);
-  X.fillStyle='#4fc22c';for(let k=0;k<8;k++){const a=k*Math.PI/4;X.fillRect(Math.cos(a)*11-3,Math.sin(a)*11-3,6,6)}
-  X.fillRect(-9,-9,18,18);X.fillStyle='#2c7a16';X.fillRect(-5,-5,10,10);X.fillStyle='#103d08';X.fillRect(-2,-2,4,4);
+  X.save();X.translate(P.x,P.y);X.rotate(P.a);
+  const di=gimg(GEAR.drill);
+  if(di){X.imageSmoothingEnabled=true;X.drawImage(di,-DRILL_SZ/2,-DRILL_SZ/2,DRILL_SZ,DRILL_SZ);X.imageSmoothingEnabled=false}   // custom drill image: tip points right (+x)
+  else{
+    X.fillStyle='#e0b48a';X.beginPath();X.moveTo(22,0);X.lineTo(8,-8);X.lineTo(8,8);X.fill();
+    X.fillStyle='#b88a62';X.fillRect(12,-1,6,2);
+    X.save();X.rotate(P.roll-P.a);
+    X.fillStyle='#4fc22c';for(let k=0;k<8;k++){const a=k*Math.PI/4;X.fillRect(Math.cos(a)*11-3,Math.sin(a)*11-3,6,6)}
+    X.fillRect(-9,-9,18,18);X.fillStyle='#2c7a16';X.fillRect(-5,-5,10,10);X.fillStyle='#103d08';X.fillRect(-2,-2,4,4);
+    X.restore();
+  }
+  drawGear();
   X.restore();
   for(const f of txt){X.globalAlpha=Math.max(0,f.l);X.fillStyle=f.c;X.font='bold 14px monospace';X.fillText(f.s,f.x-14,f.y-14)}
   X.globalAlpha=1;X.restore();
@@ -459,7 +562,7 @@ function draw(t){
 requestAnimationFrame(loop);
 (async()=>{
   if(PROJECT_ID==='YOUR_PROJECT_ID'){$('lt').textContent='Set PROJECT_ID in index.html first.';return}
-  try{await login();await refresh();$('load').style.display='none';$('menu').style.display='flex'}
+  try{await login();await refresh();try{await loadInv()}catch(e){}$('load').style.display='none';$('menu').style.display='flex'}
   catch(e){$('lt').textContent=msg(e)}
 })();
 </script></body></html>

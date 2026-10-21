@@ -121,7 +121,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(b&
 const act=async(fn,ok)=>{try{await fn();if(ok)toast(ok);closeM();load()}catch(e){toast(e.message)}};
 
 // ---------- navigation ----------
-const NAV=[['dashboard','Dashboard'],['players','Players'],['withdrawals','Withdrawals'],['anticheat','Anti-cheat'],['tasks','Earn tasks'],['rewards','Rewards'],['leaderboard','Leaderboard'],['token','Token'],['store','Store'],['drills','Drills'],['market','Marketplace'],['audit','Audit log'],['settings','Settings']];
+const NAV=[['dashboard','Dashboard'],['players','Players'],['withdrawals','Withdrawals'],['anticheat','Anti-cheat'],['tasks','Earn tasks'],['rewards','Rewards'],['leaderboard','Leaderboard'],['token','Token'],['store','Store'],['drills','Drills'],['attachments','Attachments'],['market','Marketplace'],['audit','Audit log'],['settings','Settings']];
 function route(){
   cur=location.hash.slice(1);if(!NAV.some(n=>n[0]===cur))cur='dashboard';
   ST[cur]=ST[cur]||{p:0,q:'',f:DF[cur]||''};
@@ -194,13 +194,15 @@ const CF={
   f:[T('title','Title',1),Sel('task_type','Type',['join_channel','follow_link','invite','daily_checkin','custom']),T('url','Link'),Sel('verify_mode','Verify',['telegram_member','callback','manual']),Sel('reward_currency','Reward currency',CUR),N('reward_amount','Reward amount',1,0),B('is_daily','Repeats daily',false),B('is_active','Active'),D('starts_at','Starts'),D('ends_at','Ends')]},
  rewards:{t:'rewards',one:'reward',pk:'id',note:NOTE,cols:[['id','ID'],['name','Name'],['reward_type','Type'],['code','Code'],['currency','Currency'],['amount','Amount'],['used_count','Used'],['is_active','Active']],
   f:[T('name','Name',1),Sel('reward_type','Type',['daily_login','streak','promo_code','season_prize','custom']),T('code','Promo code (optional)'),Sel('currency','Currency',CUR),N('amount','Amount',1,0),N('max_uses','Max uses'),J('config','Config (JSON)','{}'),B('is_active','Active'),D('expires_at','Expires')]},
- leaderboard:{t:'leaderboard_seasons',one:'season',pk:'id',cols:[['id','ID'],['name','Name'],['starts_at','Starts'],['ends_at','Ends'],['status','Status'],['prize_pool','Prizes']],
+ leaderboard:{t:'leaderboard_seasons',one:'season',pk:'id',cols:[['id','ID'],['name','Name'],['starts_at','Starts'],['ends_at','Ends'],['status','Status']],
   x:r=>btn('scores','',r.id,'Scores'),
   f:[T('name','Season name',1),D('starts_at','Starts',1),D('ends_at','Ends',1),Sel('status','Status',['upcoming','active','ended']),J('prize_pool','Prizes (JSON list)','[]')]},
- store:{t:'store_items',one:'item',pk:'id',note:NOTE,cols:[['id','ID'],['sku','SKU'],['name','Name'],['item_type','Type'],['price_currency','Currency'],['price_amount','Price'],['stock','Stock'],['is_active','Active']],
-  f:[T('sku','SKU (unique)',1),T('name','Name',1),Sel('item_type','Type',['drill','energy_pack','boost']),Sel('price_currency','Price currency',CUR),N('price_amount','Price',1,0),J('payload','Payload (JSON, e.g. {"drill_id":1})','{}'),N('stock','Stock (empty = unlimited)'),B('is_active','Active'),D('starts_at','Starts'),D('ends_at','Ends')]},
- drills:{t:'drills',one:'drill',pk:'id',note:NOTE,cols:[['id','ID'],['name','Name'],['rarity','Rarity'],['speed_mult','Speed x'],['hp_bonus','HP +'],['tradable','Tradable'],['is_active','Active']],
-  f:[T('name','Name',1),T('description','Description'),Sel('rarity','Rarity',['common','rare','epic','legendary']),N('speed_mult','Speed multiplier',1,1),N('hp_bonus','HP bonus',1,0),N('max_level','Max level',1,1),T('image_url','Image URL'),B('tradable','Tradable'),B('is_active','Active')]},
+ store:{t:'store_items',one:'item',pk:'id',note:NOTE,x:r=>btn('grant','store',r.id,'🎁 Grant'),cols:[['id','ID'],['sku','SKU'],['name','Name'],['item_type','Type'],['price_currency','Currency'],['price_amount','Price'],['stock','Stock'],['is_active','Active']],
+  f:[T('sku','SKU (unique)',1),T('name','Name',1),Sel('item_type','Type',['drill','attachment','energy_pack','boost']),Sel('price_currency','Price currency',CUR),N('price_amount','Price',1,0),J('payload','Payload (JSON: {"drill_id":1} or {"attachment_id":2})','{}'),N('stock','Stock (empty = unlimited)'),B('is_active','Active'),D('starts_at','Starts'),D('ends_at','Ends')]},
+ drills:{t:'drills',one:'drill',pk:'id',note:'Drill stats are applied in-game and checked by the anti-cheat. Image: https link, drill tip pointing RIGHT. Speed x 1 = normal, 1.2 = +20%.',x:r=>btn('grant','drill',r.id,'🎁 Grant'),cols:[['id','ID'],['name','Name'],['rarity','Rarity'],['speed_mult','Speed x'],['hp_bonus','HP +'],['max_level','Max lvl'],['image_url','Image'],['tradable','Tradable'],['is_active','Active']],
+  f:[T('name','Name',1),T('description','Description'),Sel('rarity','Rarity',['common','rare','epic','legendary']),N('speed_mult','Speed multiplier (1 = normal, 1.2 = +20%)',1,1),N('hp_bonus','HP bonus (added to base 100 HP)',1,0),N('max_level','Max level',1,1),T('image_url','Image URL (https, tip pointing right)'),B('tradable','Tradable'),B('is_active','Active')]},
+ attachments:{t:'attachments',one:'attachment',pk:'id',note:'Players equip one attachment per slot. Speed x multiplies with the drill; HP and damage reduction add up. Image: https link, facing RIGHT (like the drill).',x:r=>btn('grant','attachment',r.id,'🎁 Grant'),cols:[['id','ID'],['name','Name'],['slot','Slot'],['speed_mult','Speed x'],['hp_bonus','HP +'],['damage_reduction','Stone dmg -'],['image_url','Image'],['is_active','Active']],
+  f:[T('name','Name',1),T('description','Description'),Sel('slot','Slot',['front','side','back']),N('speed_mult','Speed multiplier (1 = no change, 1.1 = +10%)',1,1),N('hp_bonus','HP bonus',1,0),N('damage_reduction','Stone damage reduction (0.10 = 10% less, max 0.9)',1,0),T('image_url','Image URL (https)'),B('is_active','Active')]},
  settings:{t:'app_settings',one:'setting',pk:'key',nodel:1,note:'Owner only. These limits are used by the game server immediately.',cols:[['key','Key'],['value','Value'],['description','Description'],['updated_at','Updated']],
   f:[T('key','Key',1),J('value','Value (JSON: number, true/false or "text")','',1),T('description','Description')]},
  token:{t:'token_config',one:'token settings',pk:'id',
@@ -208,7 +210,6 @@ const CF={
 };
 const loc=v=>{const d=new Date(v);return new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,16)};
 function openForm(n,row){
-  if(n==='leaderboard')return openSeasonForm(row);
   const c=CF[n],nw=!row;row=row||{};
   const inp=x=>{let v=row[x.k];if(nw&&v===undefined)v=x.d;const a='data-k="'+x.k+'"';
     if(x.t==='b')return '<input type="checkbox" '+a+(v?' checked':'')+'>';
@@ -233,46 +234,12 @@ function openForm(n,row){
     act(()=>A('crud',{table:c.t,op:'upsert',row:out}),'Saved');
   };
 }
-// ---- custom season form with Top 1/2/3 prizes ----
-const PRIZE_TYPES=['pxn','cash','blue','drill','attachment'];
-function openSeasonForm(row){
-  const nw=!row;row=row||{};
-  let pp=row.prize_pool;if(typeof pp==='string'){try{pp=JSON.parse(pp)}catch(e){pp=[]}}
-  if(!Array.isArray(pp))pp=[];
-  const by={};pp.forEach(p=>{if(p&&p.rank)by[p.rank]=p});
-  const sec=k=>{const p=by[k]||{};return '<fieldset style="border:1px solid var(--ln);padding:10px;display:grid;gap:8px"><legend style="color:var(--gold)">Top '+k+' Prize</legend>'+
-    '<label>Reward Type<select id="pt'+k+'">'+PRIZE_TYPES.map(o=>'<option'+(o===(p.type||'pxn')?' selected':'')+'>'+o+'</option>').join('')+'</select></label>'+
-    '<label>Amount / ID<input id="pa'+k+'" type="text" placeholder="e.g. 1000, or drill/attachment ID" value="'+esc(p.amount==null?'':p.amount)+'"></label>'+
-    '<label>Image URL<input id="pi'+k+'" type="text" placeholder="https://..." value="'+esc(p.image_url||'')+'"></label></fieldset>'};
-  modal('<h3 style="margin-top:0">'+(nw?'New season':'Edit season')+'</h3><div class="fm">'+
-    '<label>Season name *<input id="sn" type="text" value="'+esc(row.name||'')+'"></label>'+
-    '<label>Starts *<input id="ss" type="datetime-local" value="'+(row.starts_at?loc(row.starts_at):'')+'"></label>'+
-    '<label>Ends *<input id="se" type="datetime-local" value="'+(row.ends_at?loc(row.ends_at):'')+'"></label>'+
-    '<label>Status<select id="st">'+['upcoming','active','ended'].map(o=>'<option'+(o===(row.status||'upcoming')?' selected':'')+'>'+o+'</option>').join('')+'</select></label>'+
-    sec(1)+sec(2)+sec(3)+'</div><div class="bar"><button class="pri" id="sv">Save</button><button data-a="close">Cancel</button></div>');
-  $('#sv').onclick=()=>{
-    const name=$('#sn').value.trim(),s0=$('#ss').value,e0=$('#se').value;
-    if(!name)return toast('Season name is required');
-    if(!s0||!e0)return toast('Start and end dates are required');
-    const prize=[];
-    for(let k=1;k<=3;k++){
-      const type=$('#pt'+k).value,raw=$('#pa'+k).value.trim(),img=$('#pi'+k).value.trim();
-      if(raw===''){if(img)return toast('Top '+k+': enter an amount / ID or clear the image');continue}
-      if(img&&!/^https?:\/\//i.test(img))return toast('Top '+k+': image URL must start with http(s)://');
-      const amount=isNaN(Number(raw))?raw:Number(raw);
-      if(['pxn','cash','blue'].includes(type)&&typeof amount!=='number')return toast('Top '+k+': amount must be a number');
-      const o={rank:k,type,amount};if(img)o.image_url=img;prize.push(o)}
-    const out={name,starts_at:new Date(s0).toISOString(),ends_at:new Date(e0).toISOString(),status:$('#st').value,prize_pool:prize};
-    if(!nw&&row.id!==undefined)out.id=row.id;
-    act(()=>A('crud',{table:'leaderboard_seasons',op:'upsert',row:out}),'Saved');
-  };
-}
 function crud(n){const c=CF[n];return async v=>{
   const d=await A('read',{table:c.t,order:c.pk,asc:c.pk==='key',limit:100});c.rows=d.rows;
   v.innerHTML='<div class="bar"><button class="pri" data-a="new" data-n="'+n+'">+ New '+c.one+'</button><span class="mut">'+(c.note||'')+'</span></div>'+
     table(c.cols,d.rows,r=>(c.x?c.x(r):'')+'<button data-a="edit" data-n="'+n+'" data-id="'+esc(r[c.pk])+'">Edit</button>'+(c.nodel?'':'<button class="dg" data-a="del" data-n="'+n+'" data-id="'+esc(r[c.pk])+'">Delete</button>'));
 }}
-['tasks','rewards','leaderboard','store','drills','settings'].forEach(n=>SEC[n]=crud(n));
+['tasks','rewards','leaderboard','store','drills','attachments','settings'].forEach(n=>SEC[n]=crud(n));
 // Settings: friendly Ads box above the generic key/value table
 const _setBase=SEC.settings;
 const sval=v=>{if(v==null)return '';if(typeof v==='string'){const t=v.trim();if(t.length>1&&t[0]==='"'&&t[t.length-1]==='"')return t.slice(1,-1);return t}return String(v)};
@@ -297,6 +264,25 @@ H.saveads=()=>{
 H.new=b=>openForm(b.dataset.n);
 H.edit=b=>{const c=CF[b.dataset.n];openForm(b.dataset.n,c.rows.find(r=>String(r[c.pk])===b.dataset.id))};
 H.del=b=>{const c=CF[b.dataset.n];if(confirm('Delete this '+c.one+'? This cannot be undone.'))act(()=>A('crud',{table:c.t,op:'delete',id:b.dataset.id}),'Deleted')};
+
+// ---- grant a drill / attachment / store item to a player ----
+H.grant=async b=>{
+  const q=prompt('Give this item to which player? Enter @username or Telegram ID');if(!q||!q.trim())return;
+  try{
+    const clean=q.trim().replace(/^@/,'');
+    const d=await A('read',/^\d+$/.test(clean)?{table:'players',eq:{tg_id:Number(clean)},limit:5}:{table:'players',search:clean,limit:5});
+    const rows=d.rows||[];
+    if(!rows.length)return toast('No player found');
+    const pl=rows.find(r=>(r.username||'').toLowerCase()===clean.toLowerCase())||(rows.length===1?rows[0]:null);
+    if(!pl)return toast('Found '+rows.length+' players. Use the exact @username or Telegram ID');
+    const who=pl.username?'@'+pl.username:(pl.first_name||pl.id);
+    if(!confirm('Give this item to '+who+'?'))return;
+    const op=b.dataset.op,body={player_id:pl.id};
+    if(op==='store')body.store_item_id=Number(b.dataset.id);else{body.type=op;body.item_id=Number(b.dataset.id)}
+    const r=await A('grant_item',body);
+    toast(r&&r.already_owned?who+' already owns this item':'Granted to '+who);
+  }catch(e){toast(e.message)}
+};
 
 H.scores=async b=>{try{
   const d=await A('read',{table:'leaderboard_scores',select:'*,players(username,first_name)',eq:{season_id:b.dataset.id},order:'score',limit:50});
