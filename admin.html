@@ -194,7 +194,7 @@ const CF={
   f:[T('title','Title',1),Sel('task_type','Type',['join_channel','follow_link','invite','daily_checkin','custom']),T('url','Link'),Sel('verify_mode','Verify',['telegram_member','callback','manual']),Sel('reward_currency','Reward currency',CUR),N('reward_amount','Reward amount',1,0),B('is_daily','Repeats daily',false),B('is_active','Active'),D('starts_at','Starts'),D('ends_at','Ends')]},
  rewards:{t:'rewards',one:'reward',pk:'id',note:NOTE,cols:[['id','ID'],['name','Name'],['reward_type','Type'],['code','Code'],['currency','Currency'],['amount','Amount'],['used_count','Used'],['is_active','Active']],
   f:[T('name','Name',1),Sel('reward_type','Type',['daily_login','streak','promo_code','season_prize','custom']),T('code','Promo code (optional)'),Sel('currency','Currency',CUR),N('amount','Amount',1,0),N('max_uses','Max uses'),J('config','Config (JSON)','{}'),B('is_active','Active'),D('expires_at','Expires')]},
- leaderboard:{t:'leaderboard_seasons',one:'season',pk:'id',cols:[['id','ID'],['name','Name'],['starts_at','Starts'],['ends_at','Ends'],['status','Status']],
+ leaderboard:{t:'leaderboard_seasons',one:'season',pk:'id',cols:[['id','ID'],['name','Name'],['starts_at','Starts'],['ends_at','Ends'],['status','Status'],['prize_pool','Prizes']],
   x:r=>btn('scores','',r.id,'Scores'),
   f:[T('name','Season name',1),D('starts_at','Starts',1),D('ends_at','Ends',1),Sel('status','Status',['upcoming','active','ended']),J('prize_pool','Prizes (JSON list)','[]')]},
  store:{t:'store_items',one:'item',pk:'id',note:NOTE,cols:[['id','ID'],['sku','SKU'],['name','Name'],['item_type','Type'],['price_currency','Currency'],['price_amount','Price'],['stock','Stock'],['is_active','Active']],
@@ -208,6 +208,7 @@ const CF={
 };
 const loc=v=>{const d=new Date(v);return new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,16)};
 function openForm(n,row){
+  if(n==='leaderboard')return openSeasonForm(row);
   const c=CF[n],nw=!row;row=row||{};
   const inp=x=>{let v=row[x.k];if(nw&&v===undefined)v=x.d;const a='data-k="'+x.k+'"';
     if(x.t==='b')return '<input type="checkbox" '+a+(v?' checked':'')+'>';
@@ -230,6 +231,40 @@ function openForm(n,row){
         else v=raw}
       out[x.k]=v}}catch(e){return toast(e.message)}
     act(()=>A('crud',{table:c.t,op:'upsert',row:out}),'Saved');
+  };
+}
+// ---- custom season form with Top 1/2/3 prizes ----
+const PRIZE_TYPES=['pxn','cash','blue','drill','attachment'];
+function openSeasonForm(row){
+  const nw=!row;row=row||{};
+  let pp=row.prize_pool;if(typeof pp==='string'){try{pp=JSON.parse(pp)}catch(e){pp=[]}}
+  if(!Array.isArray(pp))pp=[];
+  const by={};pp.forEach(p=>{if(p&&p.rank)by[p.rank]=p});
+  const sec=k=>{const p=by[k]||{};return '<fieldset style="border:1px solid var(--ln);padding:10px;display:grid;gap:8px"><legend style="color:var(--gold)">Top '+k+' Prize</legend>'+
+    '<label>Reward Type<select id="pt'+k+'">'+PRIZE_TYPES.map(o=>'<option'+(o===(p.type||'pxn')?' selected':'')+'>'+o+'</option>').join('')+'</select></label>'+
+    '<label>Amount / ID<input id="pa'+k+'" type="text" placeholder="e.g. 1000, or drill/attachment ID" value="'+esc(p.amount==null?'':p.amount)+'"></label>'+
+    '<label>Image URL<input id="pi'+k+'" type="text" placeholder="https://..." value="'+esc(p.image_url||'')+'"></label></fieldset>'};
+  modal('<h3 style="margin-top:0">'+(nw?'New season':'Edit season')+'</h3><div class="fm">'+
+    '<label>Season name *<input id="sn" type="text" value="'+esc(row.name||'')+'"></label>'+
+    '<label>Starts *<input id="ss" type="datetime-local" value="'+(row.starts_at?loc(row.starts_at):'')+'"></label>'+
+    '<label>Ends *<input id="se" type="datetime-local" value="'+(row.ends_at?loc(row.ends_at):'')+'"></label>'+
+    '<label>Status<select id="st">'+['upcoming','active','ended'].map(o=>'<option'+(o===(row.status||'upcoming')?' selected':'')+'>'+o+'</option>').join('')+'</select></label>'+
+    sec(1)+sec(2)+sec(3)+'</div><div class="bar"><button class="pri" id="sv">Save</button><button data-a="close">Cancel</button></div>');
+  $('#sv').onclick=()=>{
+    const name=$('#sn').value.trim(),s0=$('#ss').value,e0=$('#se').value;
+    if(!name)return toast('Season name is required');
+    if(!s0||!e0)return toast('Start and end dates are required');
+    const prize=[];
+    for(let k=1;k<=3;k++){
+      const type=$('#pt'+k).value,raw=$('#pa'+k).value.trim(),img=$('#pi'+k).value.trim();
+      if(raw===''){if(img)return toast('Top '+k+': enter an amount / ID or clear the image');continue}
+      if(img&&!/^https?:\/\//i.test(img))return toast('Top '+k+': image URL must start with http(s)://');
+      const amount=isNaN(Number(raw))?raw:Number(raw);
+      if(['pxn','cash','blue'].includes(type)&&typeof amount!=='number')return toast('Top '+k+': amount must be a number');
+      const o={rank:k,type,amount};if(img)o.image_url=img;prize.push(o)}
+    const out={name,starts_at:new Date(s0).toISOString(),ends_at:new Date(e0).toISOString(),status:$('#st').value,prize_pool:prize};
+    if(!nw&&row.id!==undefined)out.id=row.id;
+    act(()=>A('crud',{table:'leaderboard_seasons',op:'upsert',row:out}),'Saved');
   };
 }
 function crud(n){const c=CF[n];return async v=>{
