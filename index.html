@@ -518,6 +518,11 @@ function drawGear(){
     const im=gimg(a.url),sides=a.slot==='side'?[1,-1]:[1];
     for(const m of sides){
       X.save();X.translate(g.x,g.y*m);if(m<0)X.scale(1,-1);
+      
+      // --- NAYA ROTATION LOGIC ---
+      if (a.slot === 'front') X.rotate(Math.PI / 2); // Front ko 90 degree Right ghumaya
+      if (a.slot === 'back') X.rotate(Math.PI / 2);  // Back ko 90 degree Right ghumaya
+      
       if(im){X.imageSmoothingEnabled=true;X.drawImage(im,-g.s/2,-g.s/2,g.s,g.s);X.imageSmoothingEnabled=false}
       else{X.fillStyle=GEAR_COL[a.slot];X.fillRect(-g.s/4,-g.s/4,g.s/2,g.s/2);X.fillStyle='rgba(0,0,0,.35)';X.fillRect(-g.s/4,-g.s/4,g.s/2,3)}
       X.restore()}}}
