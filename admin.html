@@ -211,6 +211,7 @@ const CF={
 };
 const loc=v=>{const d=new Date(v);return new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,16)};
 function openForm(n,row){
+  if(n==='store') return openStoreForm(row);
   const c=CF[n],nw=!row;row=row||{};
   const inp=x=>{let v=row[x.k];if(nw&&v===undefined)v=x.d;const a='data-k="'+x.k+'"';
     if(x.t==='b')return '<input type="checkbox" '+a+(v?' checked':'')+'>';
@@ -233,6 +234,81 @@ function openForm(n,row){
         else v=raw}
       out[x.k]=v}}catch(e){return toast(e.message)}
     act(()=>A('crud',{table:c.t,op:'upsert',row:out}),'Saved');
+  };
+}
+// ---- custom Store form: pick a drill / attachment from a list instead of typing JSON ----
+function storeTypeChg(){
+  const t=$('#sf_type').value;
+  $('#sf_item_wrap').style.display=(t==='drill'||t==='attachment')?'':'none';
+  $('#sf_drill_wrap').style.display=t==='drill'?'':'none';
+  $('#sf_att_wrap').style.display=t==='attachment'?'':'none';
+  $('#sf_energy_wrap').style.display=t==='energy_pack'?'':'none';
+}
+async function openStoreForm(row){
+  const nw=!row;row=row||{};
+  let drills=[],atts=[];
+  try{
+    const [d,a]=await Promise.all([
+      A('read',{table:'drills',eq:{is_active:true},order:'id',asc:true,limit:200}),
+      A('read',{table:'attachments',eq:{is_active:true},order:'id',asc:true,limit:200})]);
+    drills=d.rows||[];atts=a.rows||[];
+  }catch(e){return toast(e.message)}
+  let pl=row.payload;if(typeof pl==='string'){try{pl=JSON.parse(pl)}catch(e){pl=null}}
+  pl=pl&&typeof pl==='object'?pl:{};
+  const TYPES=['drill','attachment','energy_pack'];
+  const curType=row.item_type||'drill';
+  const types=TYPES.indexOf(curType)<0?TYPES.concat([curType]):TYPES;   // keeps older types (e.g. boost) editable without breaking their payload
+  const opts=(list,sel,label)=>{
+    let h=list.map(x=>'<option value="'+esc(x.id)+'"'+(String(x.id)===String(sel)?' selected':'')+'>'+esc(label(x))+'</option>').join('');
+    if(sel!=null&&!list.some(x=>String(x.id)===String(sel)))h='<option value="'+esc(sel)+'" selected>ID '+esc(sel)+' (inactive / not found)</option>'+h;
+    return h||'<option value="">No active items found</option>'};
+  const dl=x=>x.name+' (Speed x'+fmtN(x.speed_mult)+', HP +'+fmtN(x.hp_bonus)+')';
+  const al=x=>x.name+' (Slot: '+x.slot+', Speed x'+fmtN(x.speed_mult)+')';
+  const cur=row.price_currency||'pxn';
+  modal('<h3 style="margin-top:0">'+(nw?'New':'Edit')+' item</h3><div class="fm">'+
+    '<label>SKU (unique) *<input id="sf_sku" type="text" value="'+esc(row.sku)+'"></label>'+
+    '<label>Name *<input id="sf_name" type="text" value="'+esc(row.name)+'"></label>'+
+    '<label>Description<input id="sf_desc" type="text" value="'+esc(row.description)+'"></label>'+
+    '<label>Image URL (https)<input id="sf_img" type="text" value="'+esc(row.image_url)+'"></label>'+
+    '<label>Item type<select id="sf_type" onchange="storeTypeChg()">'+types.map(o=>'<option'+(o===curType?' selected':'')+'>'+esc(o)+'</option>').join('')+'</select></label>'+
+    '<div id="sf_item_wrap" style="display:grid;gap:10px">'+
+      '<label id="sf_drill_wrap">Drill<select id="sf_drill">'+opts(drills,pl.drill_id,dl)+'</select></label>'+
+      '<label id="sf_att_wrap">Attachment<select id="sf_att">'+opts(atts,pl.attachment_id,al)+'</select></label>'+
+    '</div>'+
+    '<label id="sf_energy_wrap">Energy amount<input id="sf_energy" type="number" step="any" min="0" value="'+esc(pl.energy!=null?pl.energy:'')+'"></label>'+
+    '<label>Price currency<select id="sf_cur">'+CUR.map(o=>'<option'+(o===cur?' selected':'')+'>'+o+'</option>').join('')+'</select></label>'+
+    '<label>Price amount *<input id="sf_price" type="number" step="any" min="0" value="'+esc(row.price_amount!=null?row.price_amount:0)+'"></label>'+
+    '<label>Stock (empty = unlimited)<input id="sf_stock" type="number" step="1" min="0" value="'+esc(row.stock)+'"></label>'+
+    '<label>Active<input id="sf_active" type="checkbox"'+(nw||row.is_active?' checked':'')+'></label>'+
+    '</div><div class="bar"><button class="pri" id="sv">Save</button><button data-a="close">Cancel</button></div>');
+  storeTypeChg();
+  $('#sv').onclick=()=>{
+    let out;
+    try{
+      const sku=$('#sf_sku').value.trim(),name=$('#sf_name').value.trim(),type=$('#sf_type').value;
+      if(!sku)throw new Error('SKU is required');
+      if(!name)throw new Error('Name is required');
+      let payload;
+      if(type==='drill'){
+        const id=Number($('#sf_drill').value);if(!id)throw new Error('Select a drill');
+        payload={drill_id:id};
+      }else if(type==='attachment'){
+        const id=Number($('#sf_att').value);if(!id)throw new Error('Select an attachment');
+        payload={attachment_id:id};
+      }else if(type==='energy_pack'){
+        const raw=$('#sf_energy').value.trim();
+        if(raw===''||!(Number(raw)>0))throw new Error('Enter an energy amount greater than 0');
+        payload={energy:Number(raw)};
+      }else payload=row.payload!=null?row.payload:{};   // older/unknown type: leave payload as it was
+      const pr=$('#sf_price').value.trim();
+      if(pr===''||isNaN(Number(pr)))throw new Error('Price amount is required');
+      const st=$('#sf_stock').value.trim();
+      out={sku,name,description:$('#sf_desc').value.trim()||null,image_url:$('#sf_img').value.trim()||null,
+        item_type:type,price_currency:$('#sf_cur').value,price_amount:Number(pr),
+        stock:st===''?null:Number(st),is_active:$('#sf_active').checked,payload};
+      if(!nw&&row.id!==undefined)out.id=row.id;
+    }catch(e){return toast(e.message)}
+    act(()=>A('crud',{table:'store_items',op:'upsert',row:out}),'Saved');
   };
 }
 function crud(n){const c=CF[n];return async v=>{
