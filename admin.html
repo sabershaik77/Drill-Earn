@@ -121,7 +121,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(b&
 const act=async(fn,ok)=>{try{await fn();if(ok)toast(ok);closeM();load()}catch(e){toast(e.message)}};
 
 // ---------- navigation ----------
-const NAV=[['dashboard','Dashboard'],['players','Players'],['withdrawals','Withdrawals'],['anticheat','Anti-cheat'],['tasks','Earn tasks'],['rewards','Rewards'],['leaderboard','Leaderboard'],['token','Token'],['store','Store'],['drills','Drills'],['attachments','Attachments'],['market','Marketplace'],['audit','Audit log'],['settings','Settings']];
+const NAV=[['dashboard','Dashboard'],['players','Players'],['vip','VIP & Rounds'],['withdrawals','Withdrawals'],['anticheat','Anti-cheat'],['tasks','Earn tasks'],['rewards','Rewards'],['leaderboard','Leaderboard'],['token','Token'],['store','Store'],['drills','Drills'],['attachments','Attachments'],['market','Marketplace'],['audit','Audit log'],['settings','Settings']];
 function route(){
   cur=location.hash.slice(1);if(!NAV.some(n=>n[0]===cur))cur='dashboard';
   ST[cur]=ST[cur]||{p:0,q:'',f:DF[cur]||''};
@@ -146,16 +146,17 @@ H.reload=load;
 
 SEC.players=async v=>{
   const s=ST.players,d=await A('read',{table:'players',search:s.q||undefined,order:'created_at',limit:PER,offset:s.p*PER});
+  const vg=await vipGet().catch(()=>({ids:[]}));d.rows.forEach(r=>r.vip=vg.ids.includes(Number(r.tg_id)));
   v.innerHTML='<div class="bar"><input id="q" placeholder="Search username or name" value="'+esc(s.q)+'"><button data-a="psearch">Search</button></div>'+
-    table([['username','Username'],['first_name','Name'],['tg_id','Telegram ID'],['status','Status'],['trust_score','Trust'],['energy','Energy'],['created_at','Joined'],['last_seen_at','Last seen']],d.rows,r=>'<button data-a="pview" data-id="'+r.id+'">Open</button>')+pager(s,d.total);
+    table([['username','Username'],['first_name','Name'],['tg_id','Telegram ID'],['vip','VIP'],['status','Status'],['trust_score','Trust'],['energy','Energy'],['created_at','Joined'],['last_seen_at','Last seen']],d.rows,r=>'<button data-a="pview" data-id="'+r.id+'">Open</button>')+pager(s,d.total);
 };
 H.psearch=()=>{ST.players.q=$('#q').value.trim();ST.players.p=0;load()};
 H.pview=async b=>{try{
-  const d=await A('player',{id:b.dataset.id}),p=d.player,w=[].concat(p.player_wallets||[])[0]||{},dv=[].concat(p.player_devices||[]);
+  const d=await A('player',{id:b.dataset.id}),p=d.player,w=[].concat(p.player_wallets||[])[0]||{},dv=[].concat(p.player_devices||[]);const pvip=(await vipGet().catch(()=>({ids:[]}))).ids.includes(Number(p.tg_id));
   modal('<h3 style="margin-top:0">'+esc(p.username?'@'+p.username:p.first_name)+' <span class="tag s-'+p.status+'">'+p.status+'</span></h3>'+
     '<div class="cards">'+card(p.trust_score,'Trust')+card(p.energy,'Energy')+card(w.pxn,'PXN')+card(w.cash,'💵 Cash')+card(w.blue,'💠 Blue')+'</div>'+
     '<p class="mut">Telegram ID '+p.tg_id+' · joined '+dt(p.created_at)+' · '+dv.length+' device(s)'+(p.ton_wallet?' · wallet '+esc(tonFriendly(p.ton_wallet)):'')+'</p>'+
-    '<div class="bar">'+(p.status==='banned'?'<button class="pri" data-a="ban" data-b="0" data-id="'+p.id+'">Unban</button>':'<button class="dg" data-a="ban" data-b="1" data-id="'+p.id+'">Ban player</button>')+'<button data-a="close">Close</button></div>'+
+    '<div class="bar"><button data-a="vtoggle" data-tg="'+p.tg_id+'" data-name="'+esc(p.username?'@'+p.username:(p.first_name||''))+'">'+(pvip?'👑 Remove VIP':'👑 Make VIP')+'</button>'+(p.status==='banned'?'<button class="pri" data-a="ban" data-b="0" data-id="'+p.id+'">Unban</button>':'<button class="dg" data-a="ban" data-b="1" data-id="'+p.id+'">Ban player</button>')+'<button data-a="close">Close</button></div>'+
     '<h4>Flags</h4>'+table([['created_at','When'],['rule','Rule'],['severity','Sev'],['status','Status']],d.flags)+
     '<h4>Recent rounds</h4>'+table([['started_at','Started'],['status','Status'],['duration_ms','ms'],['score','Score'],['cash','💵'],['blue','💠'],['pxn','PXN']],d.rounds.slice(0,10))+
     '<h4>Ledger</h4>'+table([['created_at','When'],['currency','Cur'],['amount','Amount'],['kind','Kind']],d.ledger.slice(0,15))+
@@ -288,6 +289,77 @@ H.scores=async b=>{try{
   const d=await A('read',{table:'leaderboard_scores',select:'*,players(username,first_name)',eq:{season_id:b.dataset.id},order:'score',limit:50});
   modal('<h3 style="margin-top:0">Season scores (top 50)</h3>'+table([['@p','Player'],['score','Score'],['pxn','PXN'],['rounds','Rounds']],d.rows)+'<div class="bar"><button data-a="close">Close</button></div>');
 }catch(e){toast(e.message)}};
+
+// ================= VIP & ROUNDS =================
+// Everything is stored in app_settings: vip_players (Telegram IDs), vip_names, round_config_standard,
+// round_config_vip, leaderboard_access, leaderboard_locked_msg. The game server reads them on every round.
+const pj=v=>{if(typeof v==='string'){try{return JSON.parse(v)}catch(e){return v}}return v};
+const putS=(key,value,description)=>A('crud',{table:'app_settings',op:'upsert',row:{key,value,description}});
+async function getSettings(){const d=await A('read',{table:'app_settings',order:'key',asc:true,limit:100});const m={};(d.rows||[]).forEach(r=>m[r.key]=r.value);return m}
+async function vipGet(){
+  const m=await getSettings();let ids=pj(m.vip_players);ids=Array.isArray(ids)?ids.map(Number).filter(Number.isFinite):[];
+  let names=pj(m.vip_names);names=names&&typeof names==='object'&&!Array.isArray(names)?names:{};
+  return{ids,names,m}}
+const vipPut=async(ids,names)=>{await putS('vip_players',ids,'VIP players (Telegram IDs) - managed from admin VIP & Rounds page');await putS('vip_names',names,'VIP display names (admin only)')};
+async function findPlayer(q){
+  const clean=q.trim().replace(/^@/,'');if(!clean)return null;const num=/^\d+$/.test(clean);
+  const d=await A('read',num?{table:'players',eq:{tg_id:Number(clean)},limit:5}:{table:'players',search:clean,limit:5});
+  const rows=d.rows||[];
+  return rows.find(r=>(r.username||'').toLowerCase()===clean.toLowerCase())||(num?rows[0]:null)||null}
+const RC=[['pxn','PXN coins'],['sky','💠 Blue diamonds'],['score','➕ Score items'],['cash','💵 Cash'],['stone','🪨 Stones (obstacles)']];
+const RCD={pxn:84,score:420,cash:840,sky:840,stone:2016};
+function rcCalc(){['standard','vip'].forEach(t=>{let n=0;document.querySelectorAll('[data-rc="'+t+'"]').forEach(i=>n+=Math.floor(Number(i.value))||0);const e=$('#rt_'+t);if(e)e.textContent='Total items on map: '+n})}
+SEC.vip=async v=>{
+  const g=await vipGet(),m=g.m;
+  const cfg=t=>{const x=pj(m['round_config_'+t]);return Object.assign({},RCD,x&&typeof x==='object'?x:{})};
+  const cs=cfg('standard'),cv=cfg('vip');
+  const access=String(sval(m.leaderboard_access)||'vip').toLowerCase()==='everyone'?'everyone':'vip';
+  const lockMsg=sval(m.leaderboard_locked_msg)||'Leaderboard sirf VIP members ke liye hai.';
+  const box=(t,c,title,note)=>'<div class="c" style="gap:8px;min-width:270px;flex:1"><b style="font-size:16px">'+title+'</b><span>'+note+'</span><div class="fm" style="margin:6px 0">'+
+    RC.map(r=>'<label>'+r[1]+'<input type="number" min="0" max="5000" step="1" data-rc="'+t+'" data-k="'+r[0]+'" value="'+esc(c[r[0]])+'"></label>').join('')+'</div><span class="mut" id="rt_'+t+'"></span></div>';
+  const rows=g.ids.map(id=>({tg:id,name:g.names[id]||'ID '+id}));
+  v.innerHTML='<div class="cards">'+card(g.ids.length,'👑 VIP members')+'</div>'+
+   '<h3>Items per round</h3><p class="mut">Har round me map par kitni cheezein hongi (round tab khatam hota hai jab stones se HP khatam ho, isliye stones kam se kam 30 rakho; cheezein kam hongi to round lamba chalega). Naye players aur jinhe VIP nahi banaya wo "Non-VIP" wali quantity paate hain.</p>'+
+   '<div style="display:flex;gap:14px;flex-wrap:wrap">'+box('standard',cs,'Non-VIP rounds','Sab naye aur normal players')+box('vip',cv,'👑 VIP rounds','Sirf wo players jo neeche list me hain')+'</div>'+
+   '<h3>Leaderboard access</h3><div class="fm" style="max-width:520px"><label>Who can open the leaderboard<select id="lba"><option value="vip"'+(access==='vip'?' selected':'')+'>VIP only</option><option value="everyone"'+(access==='everyone'?' selected':'')+'>Everyone</option></select></label>'+
+   '<label>Message for non-VIP<input id="lbm" maxlength="200" value="'+esc(lockMsg)+'"></label></div>'+
+   '<div class="bar"><button class="pri" data-a="savevip">Save rounds &amp; leaderboard</button><span class="mut">Naye round se apply hota hai; chalta hua round nahi badalta.</span></div>'+
+   '<h3>VIP members</h3><div class="fm" style="max-width:520px"><label>Add VIP (@username ya Telegram ID, ek se zyada ho to line ya comma se alag)<textarea id="vadd" rows="3" placeholder="@ali&#10;123456789"></textarea></label></div>'+
+   '<div class="bar"><button class="pri" data-a="vaddgo">Add VIP</button></div>'+
+   table([['name','Player'],['tg','Telegram ID']],rows,r=>'<button class="dg" data-a="vrm" data-tg="'+r.tg+'">Remove VIP</button>');
+  v.querySelectorAll('[data-rc]').forEach(i=>i.oninput=rcCalc);rcCalc();
+};
+H.savevip=()=>{
+  const out={standard:{},vip:{}};
+  for(const t of ['standard','vip']){let total=0;
+    for(const r of RC){const n=Number(document.querySelector('[data-rc="'+t+'"][data-k="'+r[0]+'"]').value);
+      if(!Number.isInteger(n)||n<0||n>5000)return toast((t==='vip'?'VIP':'Non-VIP')+' · '+r[1]+': 0 se 5000 ke beech poora number daalo');
+      if(r[0]==='stone'&&n<30)return toast((t==='vip'?'VIP':'Non-VIP')+' · Stones kam se kam 30 rakho — round tab khatam hota hai jab drill ka HP stones se khatam ho');
+      out[t][r[0]]=n;total+=n}
+    if(total<1||total>12000)return toast((t==='vip'?'VIP':'Non-VIP')+': total items 1 se 12000 ke beech hone chahiye')}
+  const msg=$('#lbm').value.trim().slice(0,200);
+  act(async()=>{
+    await putS('round_config_standard',out.standard,'Items per round for non-VIP players (admin: VIP & Rounds)');
+    await putS('round_config_vip',out.vip,'Items per round for VIP players (admin: VIP & Rounds)');
+    await putS('leaderboard_access',$('#lba').value,'Who can open the leaderboard: vip | everyone');
+    await putS('leaderboard_locked_msg',msg,'Message shown to non-VIP when leaderboard is locked');
+  },'Saved')};
+H.vaddgo=async()=>{
+  const list=[...new Set($('#vadd').value.split(/[\s,;]+/).filter(Boolean))];
+  if(!list.length)return toast('Username ya Telegram ID daalo');if(list.length>200)return toast('Ek baar me max 200');
+  try{const g=await vipGet();let added=0,dup=0;const miss=[];
+    for(const q of list){const p=await findPlayer(q);let id,name;const n=q.replace(/^@/,'');
+      if(p){id=Number(p.tg_id);name=p.username?'@'+p.username:(p.first_name||'ID '+id)}
+      else if(/^\d+$/.test(n)){id=Number(n);name='ID '+id+' (not joined yet)'}
+      else{miss.push(q);continue}
+      if(g.ids.includes(id)){dup++;continue}g.ids.push(id);g.names[id]=name;added++}
+    if(added)await vipPut(g.ids,g.names);
+    toast('Added '+added+(dup?' · already VIP '+dup:'')+(miss.length?' · not found: '+miss.join(', '):''));load()
+  }catch(e){toast(e.message)}};
+H.vrm=b=>{const id=Number(b.dataset.tg);if(!confirm('Remove VIP access for this player?'))return;
+  act(async()=>{const g=await vipGet();delete g.names[id];await vipPut(g.ids.filter(x=>x!==id),g.names)},'VIP removed')};
+H.vtoggle=b=>{const id=Number(b.dataset.tg);
+  act(async()=>{const g=await vipGet();if(g.ids.includes(id)){delete g.names[id];g.ids=g.ids.filter(x=>x!==id)}else{g.ids.push(id);g.names[id]=b.dataset.name||'ID '+id}await vipPut(g.ids,g.names)},'VIP updated')};
 
 SEC.token=async v=>{
   const t=await A('read',{table:'token_config',eq:{id:1}}),c=t.rows[0]||{};CF.token.row=c;

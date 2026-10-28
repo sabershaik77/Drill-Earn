@@ -88,7 +88,7 @@ const API='https://'+PROJECT_ID+'.supabase.co/functions/v1/game';
 const TG=window.Telegram&&Telegram.WebApp;if(TG){TG.ready();TG.expand();try{TG.disableVerticalSwipes()}catch(e){}}
 const $=id=>document.getElementById(id),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const M={no_energy:'No energy left ⚡',ad_limit_reached:'No ads left today',ad_cooldown:'Wait a few seconds before the next ad',round_already_active:'A round is already running',banned:'This account is banned',withdraw_disabled:'Withdrawals are turned off',low_trust:'Account is under verification',account_too_new:'Account is too new. Try again later',bad_ton_address:'TON address is not valid',amount_out_of_range:'Amount is out of allowed range',daily_cap:'Daily withdraw limit reached',under_review:'Account is under review',account_restricted:'Account is restricted',init_data_expired:'Reopen the game from Telegram',bad_init_data:'Open this game from Telegram',unauthorized:'Session expired. Reopen the game',network:'Network problem. Try again',not_owned:'You do not own this item',item_inactive:'This item is not available',slot_mismatch:'Wrong slot',bad_item:'Invalid item',player_not_found:'Player not found'};
+const M={vip_only:'🔒 VIP members only',no_energy:'No energy left ⚡',ad_limit_reached:'No ads left today',ad_cooldown:'Wait a few seconds before the next ad',round_already_active:'A round is already running',banned:'This account is banned',withdraw_disabled:'Withdrawals are turned off',low_trust:'Account is under verification',account_too_new:'Account is too new. Try again later',bad_ton_address:'TON address is not valid',amount_out_of_range:'Amount is out of allowed range',daily_cap:'Daily withdraw limit reached',under_review:'Account is under review',account_restricted:'Account is restricted',init_data_expired:'Reopen the game from Telegram',bad_init_data:'Open this game from Telegram',unauthorized:'Session expired. Reopen the game',network:'Network problem. Try again',not_owned:'You do not own this item',item_inactive:'This item is not available',slot_mismatch:'Wrong slot',bad_item:'Invalid item',player_not_found:'Player not found'};
 const msg=e=>{const m=e&&e.message||'error';return M[m]||(/check constraint/.test(m)?'Not enough balance':m)};
 let token=null,me=null,R=null,busy=0,nextAt=0;
 let AD={provider:'none',block:''},_mtLoaded='';
@@ -97,7 +97,7 @@ async function api(action,data={},retry){
   let r,j;
   try{r=await fetch(API,{method:'POST',headers:Object.assign({'Content-Type':'application/json'},token?{Authorization:'Bearer '+token}:{}),body:JSON.stringify(Object.assign({action},data))});j=await r.json()}catch(e){throw new Error('network')}
   if(r.status===401&&action!=='auth'&&!retry){await login();return api(action,data,true)}
-  if(!r.ok||j.error)throw new Error(j.error||'error');
+  if(!r.ok||j.error){const er=new Error(j.error||'error');er.detail=j.message;throw er}
   return j;
 }
 async function login(){const j=await api('auth',{initData:TG?TG.initData:'',device:dev()});token=j.token}
@@ -116,7 +116,7 @@ function toast(t){const e=$('toast');e.textContent=t;e.style.display='block';cle
 // ---------- menu ----------
 function renderMenu(){
   const e=me.energy,w=me.wallet;
-  $('en').textContent='⚡ '+e.energy+'/'+e.cap;
+  $('en').textContent=(me.vip?'👑 ':'')+'⚡ '+e.energy+'/'+e.cap;$('lb').textContent=me.leaderboard_open===false?'🔒 Top 50':'🏆 Top 50';
   $('byv').textContent=(+w.pxn).toFixed(4);$('bc').textContent='💵 '+w.cash;$('bb').textContent='💠 '+w.blue;
   $('adb').textContent='📺 Watch ad (+1 ⚡) · '+e.ads_left+' left';$('adb').disabled=e.ads_left<=0;
   nextAt=e.next_in_seconds!=null?Date.now()+e.next_in_seconds*1000:0;
@@ -133,7 +133,7 @@ function panel(html){$('pc').dataset.v='';$('pc').innerHTML=html+'<button id="px
 
 $('pl').onclick=async()=>{
   $('pl').disabled=true;
-  try{R=await api('start_round');me.energy.energy=R.energy_left;begin(R.seed,R.loadout)}catch(e){toast(msg(e))}
+  try{R=await api('start_round');me.energy.energy=R.energy_left;begin(R.seed,R.loadout,R.round_config)}catch(e){toast(msg(e))}
   $('pl').disabled=false;
 };
 $('adb').onclick=async()=>{
@@ -278,7 +278,7 @@ $('lb').onclick=async()=>{
   try{const r=await api('leaderboard');
     const top=r.top||[];
     panel('<div id="lbw">'+prizeHtml(r.prizes)+'<h3>Top players</h3><div class="list">'+(top.length?top.map(x=>'<div><span>'+x.rank+'. '+esc(x.username||x.first_name||'Player')+'</span><span>'+x.score+'</span></div>').join(''):'<p>No scores yet this season.</p>')+'</div></div>');
-  }catch(e){toast(msg(e))}
+  }catch(e){if(e.message==='vip_only')panel('<h3>🔒 Leaderboard</h3><p>'+esc(e.detail||'Leaderboard is for VIP members only.')+'</p>');else toast(msg(e))}
 };
 $('ob').onclick=()=>{showMenu();refresh().catch(()=>{})};
 
@@ -350,9 +350,20 @@ $('inv').onclick=async()=>{
 // ---------- map (MUST match server layout.ts) ----------
 const W=640,S=6,WS=3840,N_ITEMS=4200;
 function mb(a){return()=>{a|=0;a=(a+0x6D2B79F5)|0;let t=Math.imul(a^(a>>>15),1|a);t=(t+Math.imul(t^(t>>>7),61|t))^t;return((t^(t>>>14))>>>0)/4294967296}}
-function genLayout(seed){
+const CFG_T=['pxn','score','cash','sky','stone'];
+const cfgOk=c=>c&&typeof c==='object'&&CFG_T.every(k=>Number.isInteger(c[k])&&c[k]>=0&&c[k]<=5000)?c:null;
+function genLayout(seed,cfg){
   const r=mb(seed);
   const start={x:400+r()*(WS-800),y:400+r()*(WS-800),a:r()*6.28},items=[];
+  cfg=cfgOk(cfg);
+  if(cfg){ // quantities per tier (VIP / non-VIP) sent by the server — MUST match layout.ts
+    let n=0;
+    for(const t of CFG_T)for(let k=0;k<cfg[t];k++){
+      let x,y,rot;do{x=40+r()*(WS-80);y=40+r()*(WS-80);rot=r()*6}while(Math.hypot(x-start.x,y-start.y)<90);
+      items.push({i:n++,x,y,rot,t});
+    }
+    return{start,items};
+  }
   for(let n=0;n<N_ITEMS;n++){
     const x=40+r()*(WS-80),y=40+r()*(WS-80),q=r(),rot=r()*6;
     if(Math.hypot(x-start.x,y-start.y)<90)continue;
@@ -384,7 +395,7 @@ function loadPxn(src,fb){const im=new Image();im.decoding='async';
   im.onerror=()=>{if(fb)loadPxn(fb)};im.src=src}
 loadPxn(PXN_URL||PXN_FALLBACK,PXN_URL?PXN_FALLBACK:null);
 document.querySelectorAll('.pxi').forEach(i=>{i.onerror=()=>{i.onerror=null;i.src=PXN_FALLBACK};i.src=PXN_URL||PXN_FALLBACK});
-function begin(seed,lo){
+function begin(seed,lo,cfg){
   lo=lo||{};
   const sm=Number.isFinite(+lo.speed_mult)&&+lo.speed_mult>0?+lo.speed_mult:1,hb=Number.isFinite(+lo.hp_bonus)?Math.trunc(+lo.hp_bonus):0,dr=Number.isFinite(+lo.damage_reduction)?Math.min(.9,Math.max(0,+lo.damage_reduction)):0;
   GS={spd:BASE_SPEED*sm,maxhp:BASE_HP+hb,dr,dmg:STONE_DMG*(1-dr)};
@@ -396,7 +407,7 @@ function begin(seed,lo){
     if(h(i,j)>.85)wx.fillStyle=tones[2];
     wx.fillRect(i,j,1,1);
   }
-  const L=genLayout(seed);
+  const L=genLayout(seed,cfg);
   P={x:L.start.x,y:L.start.y,a:L.start.a,roll:0,hp:GS.maxhp,maxhp:GS.maxhp,score:0,cash:0,sky:0,pxn:0,shake:0};
   items=L.items;fx=[];txt=[];ev=[];gt=0;
   dig();upd();
