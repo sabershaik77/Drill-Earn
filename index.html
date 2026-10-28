@@ -52,6 +52,10 @@ input{font:inherit;padding:10px;background:#15110b;border:2px solid #5a4a36;colo
 .it button.on{background:var(--gold);border-color:#ffe680;color:#201800;font-weight:bold}
 .slt{font-size:13px;color:var(--gold);margin:6px 0 0}
 .tot{font-size:12px;background:var(--soil2);padding:6px 8px;text-align:left}
+.it .inf .rw{color:var(--gold);font-size:12px;font-weight:bold;opacity:1}
+.it button.ok{background:#2c3a22;border-color:#4a6a38;color:#9fd27f}
+.it button.go{background:var(--grn);border-color:#a8e08c;color:#102008;font-weight:bold}
+.it.sold{opacity:.55}
 </style></head><body>
 <canvas id="c"></canvas>
 <div id="hud"><div id="hp"><div id="hpf"></div></div><span id="sc">Score 0</span><span id="cs">💵0</span><span id="sk">💠0</span><span id="gd"><img class="pxi" alt="PXN"><span id="gdv">0</span></span></div>
@@ -64,6 +68,7 @@ input{font:inherit;padding:10px;background:#15110b;border:2px solid #5a4a36;colo
   <div class="row"><b id="en">⚡ 0/24</b><small id="nx"></small></div>
   <div class="bal"><span id="by"><img class="pxi" alt="PXN"><span id="byv">0</span></span><span id="bc">💵 0</span><span id="bb">💠 0</span></div>
   <div class="prow"><button class="big" id="pl">▶ Play (1 ⚡)</button><button id="inv">🎒 Inventory</button></div>
+  <div class="grid" style="grid-template-columns:1fr 1fr"><button id="storeb">🏪 Store</button><button id="tasksb">✅ Tasks</button></div>
   <button id="adb">📺 Watch ad (+1 ⚡)</button>
   <div class="grid" style="grid-template-columns:1fr 1fr"><button id="wd">💸 Withdraw</button><button id="lb">🏆 Top 50</button></div>
   <button id="stb">⚙ Settings</button>
@@ -88,7 +93,7 @@ const API='https://'+PROJECT_ID+'.supabase.co/functions/v1/game';
 const TG=window.Telegram&&Telegram.WebApp;if(TG){TG.ready();TG.expand();try{TG.disableVerticalSwipes()}catch(e){}}
 const $=id=>document.getElementById(id),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const M={vip_only:'🔒 VIP members only',no_energy:'No energy left ⚡',ad_limit_reached:'No ads left today',ad_cooldown:'Wait a few seconds before the next ad',round_already_active:'A round is already running',banned:'This account is banned',withdraw_disabled:'Withdrawals are turned off',low_trust:'Account is under verification',account_too_new:'Account is too new. Try again later',bad_ton_address:'TON address is not valid',amount_out_of_range:'Amount is out of allowed range',daily_cap:'Daily withdraw limit reached',under_review:'Account is under review',account_restricted:'Account is restricted',init_data_expired:'Reopen the game from Telegram',bad_init_data:'Open this game from Telegram',unauthorized:'Session expired. Reopen the game',network:'Network problem. Try again',not_owned:'You do not own this item',item_inactive:'This item is not available',slot_mismatch:'Wrong slot',bad_item:'Invalid item',player_not_found:'Player not found'};
+const M={vip_only:'🔒 VIP members only',no_energy:'No energy left ⚡',ad_limit_reached:'No ads left today',ad_cooldown:'Wait a few seconds before the next ad',round_already_active:'A round is already running',banned:'This account is banned',withdraw_disabled:'Withdrawals are turned off',low_trust:'Account is under verification',account_too_new:'Account is too new. Try again later',bad_ton_address:'TON address is not valid',amount_out_of_range:'Amount is out of allowed range',daily_cap:'Daily withdraw limit reached',under_review:'Account is under review',account_restricted:'Account is restricted',init_data_expired:'Reopen the game from Telegram',bad_init_data:'Open this game from Telegram',unauthorized:'Session expired. Reopen the game',network:'Network problem. Try again',not_owned:'You do not own this item',item_inactive:'This item is not available',slot_mismatch:'Wrong slot',bad_item:'Invalid item',player_not_found:'Player not found',already_claimed:'Already claimed',not_member:'Join the channel first, then press Claim',channel_check_failed:'Could not verify right now. Try again later',channel_not_configured:'This task is not set up correctly',task_not_found:'Task not found',task_expired:'This task has ended',insufficient_funds:'Not enough balance',sold_out:'Sold out',already_owned:'You already own this',item_not_found:'Item not found',energy_not_supported:'This item is not available yet',unsupported_item_type:'This item is not available yet',server_misconfigured:'Server problem. Try again later'};
 const msg=e=>{const m=e&&e.message||'error';return M[m]||(/check constraint/.test(m)?'Not enough balance':m)};
 let token=null,me=null,R=null,busy=0,nextAt=0;
 let AD={provider:'none',block:''},_mtLoaded='';
@@ -346,6 +351,105 @@ $('pc').addEventListener('click',e=>{
 $('inv').onclick=async()=>{
   renderInventory();
   try{await loadInv();if($('pc').dataset.v==='inv')renderInventory()}catch(e){toast(msg(e))}};
+
+
+// ================= TASKS & STORE =================
+const CUR_L={pxn:'PXN',cash:'💵',blue:'💠'};
+const fmtN=v=>{v=+v;return Number.isInteger(v)?String(v):String(+v.toFixed(4))};
+const amt=(c,a)=>fmtN(a)+' '+(CUR_L[c]||esc(c));
+function logo(u,ico){u=String(u||'').trim();
+  return /^https?:\/\//i.test(u)?'<img src="'+esc(u)+'" alt="" onerror="this.outerHTML=\'<div class=ph>'+ico+'</div>\'">':'<div class="ph">'+ico+'</div>'}
+function openLink(u){
+  try{
+    if(TG&&/^https?:\/\/(t|telegram)\.me\//i.test(u)&&TG.openTelegramLink)return TG.openTelegramLink(u);
+    if(TG&&TG.openLink)return TG.openLink(u);
+  }catch(e){}
+  window.open(u,'_blank')}
+const askOk=t=>new Promise(r=>{try{if(TG&&TG.showConfirm)return TG.showConfirm(t,r)}catch(e){}r(confirm(t))});
+
+// ---- Tasks ----
+let TK={list:[],opened:{},busy:{}};
+const TICO={join_channel:'📣',follow_link:'🔗',daily_checkin:'📅',custom:'⭐'};
+function renderTasks(){
+  const L=TK.list;
+  const rows=L.length?L.map(t=>{
+    const id=String(t.id),needGo=!t.done&&t.url&&t.task_type!=='daily_checkin'&&!TK.opened[id];
+    let b;
+    if(t.done)b='<button class="ok" disabled>Claimed</button>';
+    else if(TK.busy[id])b='<button disabled>…</button>';
+    else if(needGo)b='<button class="go" data-go="'+esc(id)+'">Go</button>';
+    else b='<button class="on" data-claim="'+esc(id)+'">'+(t.task_type==='join_channel'?'Verify':'Claim')+'</button>';
+    return '<div class="it'+(t.done?'':' eq')+'">'+logo(t.image_url,TICO[t.task_type]||'⭐')+
+      '<div class="inf"><b>'+esc(t.title)+'</b>'+(t.description?'<small>'+esc(t.description)+'</small>':'')+
+      '<small class="rw">+'+amt(t.reward_currency,t.reward_amount)+(t.is_daily?' · daily':'')+'</small></div>'+b+'</div>'}).join('')
+    :'<p>No tasks right now. Check back later.</p>';
+  panel('<h3>✅ Tasks</h3><div class="inv">'+rows+'</div>');
+  $('pc').dataset.v='tasks';
+}
+async function loadTasks(){const j=await api('get_tasks');TK.list=j.tasks||[];TK.list.forEach(t=>gimg(t.image_url))}
+$('tasksb').onclick=async()=>{
+  panel('<h3>✅ Tasks</h3><p>Loading…</p>');$('pc').dataset.v='tasks';
+  try{await loadTasks();if($('pc').dataset.v==='tasks')renderTasks()}catch(e){toast(msg(e));if($('pc').dataset.v==='tasks')renderTasks()}};
+async function claimTask(id){
+  const t=TK.list.find(x=>String(x.id)===id);if(!t||t.done||TK.busy[id])return;
+  TK.busy[id]=1;renderTasks();
+  try{
+    await api('claim_task',{task_id:t.id});
+    t.done=true;toast('+'+amt(t.reward_currency,t.reward_amount));
+    refresh().catch(()=>{});
+  }catch(e){
+    if(e.message==='already_claimed')t.done=true;
+    if(e.message==='not_member')delete TK.opened[id];   // send them back to "Go" so they can join
+    toast(msg(e));
+  }
+  delete TK.busy[id];
+  if($('pc').dataset.v==='tasks')renderTasks();
+}
+
+// ---- Store ----
+let STO={items:[]};
+function renderStore(){
+  const w=me.wallet||{};
+  const rows=STO.items.length?STO.items.map(i=>{
+    const soldOut=i.stock!=null&&+i.stock<=0,afford=(+w[i.price_currency]||0)>=+i.price_amount;
+    const ico=i.item_type==='drill'?'⛏':i.item_type==='attachment'?'🔧':'⚡';
+    let b;
+    if(i.owned)b='<button class="ok" disabled>Owned</button>';
+    else if(soldOut)b='<button disabled>Sold out</button>';
+    else b='<button class="'+(afford?'go':'')+'" data-buy="'+i.id+'"'+(afford?'':' disabled')+'>Buy</button>';
+    const sub=i.item_type==='energy_pack'&&i.energy?'+'+i.energy+' ⚡':(i.stock!=null&&!soldOut?i.stock+' left':'');
+    return '<div class="it'+(soldOut?' sold':'')+'">'+logo(i.image_url,ico)+
+      '<div class="inf"><b>'+esc(i.name)+'</b>'+(i.description?'<small>'+esc(i.description)+'</small>':'')+(sub?'<small>'+esc(sub)+'</small>':'')+
+      '<small class="rw">'+amt(i.price_currency,i.price_amount)+'</small></div>'+b+'</div>'}).join('')
+    :'<p>The store is empty right now.</p>';
+  panel('<h3>🏪 Store</h3><div class="tot">Balance: '+(+w.pxn||0).toFixed(4)+' PXN · 💵 '+(w.cash||0)+' · 💠 '+(w.blue||0)+'</div><div class="inv">'+rows+'</div>');
+  $('pc').dataset.v='store';
+}
+async function loadStore(){const j=await api('get_store');STO.items=j.items||[];STO.items.forEach(i=>gimg(i.image_url))}
+$('storeb').onclick=async()=>{
+  panel('<h3>🏪 Store</h3><p>Loading…</p>');$('pc').dataset.v='store';
+  try{await loadStore();if($('pc').dataset.v==='store')renderStore()}catch(e){toast(msg(e));if($('pc').dataset.v==='store')renderStore()}};
+let buying=0;
+async function buyItem(id){
+  const i=STO.items.find(x=>x.id===id);if(!i||buying)return;
+  if(!await askOk('Buy '+i.name+' for '+amt(i.price_currency,i.price_amount).replace(/[💵💠]/g,m=>m==='💵'?'Cash':'Sky')+'?'))return;
+  buying=1;
+  try{
+    await api('buy_item',{item_id:id});
+    toast('Purchased ✓');
+    await refresh().catch(()=>{});
+  }catch(e){toast(msg(e))}
+  try{await loadStore()}catch(e){}
+  buying=0;
+  if($('pc').dataset.v==='store')renderStore();
+}
+
+$('pc').addEventListener('click',e=>{
+  const g=e.target.closest('[data-go]');
+  if(g){const id=g.dataset.go,t=TK.list.find(x=>String(x.id)===id);
+    if(t&&t.url){openLink(t.url);TK.opened[id]=1;setTimeout(()=>{if($('pc').dataset.v==='tasks')renderTasks()},400)}return}
+  const c=e.target.closest('[data-claim]');if(c){claimTask(c.dataset.claim);return}
+  const b=e.target.closest('[data-buy]');if(b)buyItem(+b.dataset.buy)});
 
 // ---------- map (MUST match server layout.ts) ----------
 const W=640,S=6,WS=3840,N_ITEMS=4200;
