@@ -17,7 +17,7 @@ canvas{position:fixed;inset:0;width:100%;height:100%;image-rendering:pixelated}
 body.play #hud{display:flex}body.play #base{display:block}
 .ov,.ov *{touch-action:manipulation}
 .ov{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.82);padding:16px;text-align:center}
-.card{width:100%;max-width:340px;background:var(--soil);border:2px solid var(--soil2);padding:18px;display:flex;flex-direction:column;gap:10px;max-height:92%}
+.card{width:100%;max-width:460px;background:var(--soil);border:2px solid var(--soil2);padding:18px;display:flex;flex-direction:column;gap:10px;max-height:92%}
 h2,h3{margin:0;font-size:20px}h3{font-size:17px}p{margin:0;font-size:13px;opacity:.85}
 .row{display:flex;justify-content:space-between;align-items:baseline}
 .bal{display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:14px;text-align:left}
@@ -413,30 +413,36 @@ function renderStore(){
   const rows=STO.items.length?STO.items.map(i=>{
     const soldOut=i.stock!=null&&+i.stock<=0,afford=(+w[i.price_currency]||0)>=+i.price_amount;
     const ico=i.item_type==='drill'?'⛏':i.item_type==='attachment'?'🔧':'⚡';
+    
     let b;
     if(i.owned)b='<button class="ok" disabled>Owned</button>';
     else if(soldOut)b='<button disabled>Sold out</button>';
     else b='<button class="'+(afford?'go':'')+'" data-buy="'+i.id+'"'+(afford?'':' disabled')+'>Buy</button>';
-    let sub = '';
-    if (i.item_type === 'energy_pack' && i.energy) sub = '+' + i.energy + ' ⚡';
-    else if (i.item_type === 'attachment') {
-      let st = [];
-      if (i.slot) st.push('Slot: ' + i.slot.toUpperCase());
-      if (i.speed_mult && +i.speed_mult !== 1) st.push('Speed: ' + (i.speed_mult > 1 ? '+' : '') + Math.round((+i.speed_mult - 1) * 100) + '%');
-      if (i.hp_bonus) st.push('HP: ' + (i.hp_bonus > 0 ? '+' : '') + i.hp_bonus);
-      if (i.damage_reduction) st.push('Dmg Red: ' + Math.round(+i.damage_reduction * 100) + '%');
-      sub = st.join(' · ');
+
+    // Line-by-line details banayein
+    let statsHtml = '';
+    if (i.item_type === 'energy_pack' && i.energy) {
+      statsHtml += '<small>+'+i.energy+' ⚡</small>';
+    } else if (i.item_type === 'attachment') {
+      if (i.slot) statsHtml += '<small style="color:var(--gold);font-weight:bold">Slot: ' + esc(i.slot.toUpperCase()) + '</small>';
+      if (i.speed_mult && +i.speed_mult !== 1) statsHtml += '<small>Speed: ' + (i.speed_mult > 1 ? '+' : '') + Math.round((+i.speed_mult - 1) * 100) + '%</small>';
+      if (i.hp_bonus) statsHtml += '<small>HP: ' + (i.hp_bonus > 0 ? '+' : '') + i.hp_bonus + '</small>';
+      if (i.damage_reduction) statsHtml += '<small>Stone Dmg Red: ' + Math.round(+i.damage_reduction * 100) + '%</small>';
     } else if (i.item_type === 'drill') {
-      let st = [];
-      if (i.speed_mult && +i.speed_mult !== 1) st.push('Speed: +' + Math.round((+i.speed_mult - 1) * 100) + '%');
-      if (i.hp_bonus) st.push('HP: +' + i.hp_bonus);
-      sub = st.join(' · ');
+      if (i.speed_mult && +i.speed_mult !== 1) statsHtml += '<small>Speed: +' + Math.round((+i.speed_mult - 1) * 100) + '%</small>';
+      if (i.hp_bonus) statsHtml += '<small>HP: +' + i.hp_bonus + '</small>';
     }
-    if (i.stock != null && !soldOut) sub += (sub ? ' · ' : '') + i.stock + ' left';
+    if (i.stock != null && !soldOut) statsHtml += '<small class="mut">'+i.stock+' left</small>';
+
     return '<div class="it'+(soldOut?' sold':'')+'">'+logo(i.image_url,ico)+
-      '<div class="inf"><b>'+esc(i.name)+'</b>'+(i.description?'<small>'+esc(i.description)+'</small>':'')+(sub?'<small>'+esc(sub)+'</small>':'')+
-      '<small class="rw">'+amt(i.price_currency,i.price_amount)+'</small></div>'+b+'</div>'}).join('')
-    :'<p>The store is empty right now.</p>';
+      '<div class="inf">'+
+        '<b>'+esc(i.name)+'</b>'+
+        (i.description?'<small style="opacity:.8">'+esc(i.description)+'</small>':'')+
+        statsHtml+
+        '<small class="rw" style="margin-top:4px;font-size:14px">'+amt(i.price_currency,i.price_amount)+'</small>'+
+      '</div>'+b+'</div>'
+  }).join(''):'<p>The store is empty right now.</p>';
+  
   panel('<h3>🏪 Store</h3><div class="tot">Balance: '+(+w.pxn||0).toFixed(4)+' PXN · 💵 '+(w.cash||0)+' · 💠 '+(w.blue||0)+'</div><div class="inv">'+rows+'</div>');
   $('pc').dataset.v='store';
 }
