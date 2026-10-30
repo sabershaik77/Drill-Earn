@@ -417,7 +417,22 @@ function renderStore(){
     if(i.owned)b='<button class="ok" disabled>Owned</button>';
     else if(soldOut)b='<button disabled>Sold out</button>';
     else b='<button class="'+(afford?'go':'')+'" data-buy="'+i.id+'"'+(afford?'':' disabled')+'>Buy</button>';
-    const sub=i.item_type==='energy_pack'&&i.energy?'+'+i.energy+' ⚡':(i.stock!=null&&!soldOut?i.stock+' left':'');
+    let sub = '';
+    if (i.item_type === 'energy_pack' && i.energy) sub = '+' + i.energy + ' ⚡';
+    else if (i.item_type === 'attachment') {
+      let st = [];
+      if (i.slot) st.push('Slot: ' + i.slot.toUpperCase());
+      if (i.speed_mult && +i.speed_mult !== 1) st.push('Speed: ' + (i.speed_mult > 1 ? '+' : '') + Math.round((+i.speed_mult - 1) * 100) + '%');
+      if (i.hp_bonus) st.push('HP: ' + (i.hp_bonus > 0 ? '+' : '') + i.hp_bonus);
+      if (i.damage_reduction) st.push('Dmg Red: ' + Math.round(+i.damage_reduction * 100) + '%');
+      sub = st.join(' · ');
+    } else if (i.item_type === 'drill') {
+      let st = [];
+      if (i.speed_mult && +i.speed_mult !== 1) st.push('Speed: +' + Math.round((+i.speed_mult - 1) * 100) + '%');
+      if (i.hp_bonus) st.push('HP: +' + i.hp_bonus);
+      sub = st.join(' · ');
+    }
+    if (i.stock != null && !soldOut) sub += (sub ? ' · ' : '') + i.stock + ' left';
     return '<div class="it'+(soldOut?' sold':'')+'">'+logo(i.image_url,ico)+
       '<div class="inf"><b>'+esc(i.name)+'</b>'+(i.description?'<small>'+esc(i.description)+'</small>':'')+(sub?'<small>'+esc(sub)+'</small>':'')+
       '<small class="rw">'+amt(i.price_currency,i.price_amount)+'</small></div>'+b+'</div>'}).join('')
